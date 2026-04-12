@@ -1,146 +1,201 @@
 # 🩹 AutoHeal 2.0 — AI-Powered Self-Healing CI/CD Platform
 
-> Automatically detect, diagnose, and fix CI/CD failures using AI.
+AutoHeal 2.0 is a full-stack SaaS platform that **automatically detects CI/CD failures**, **diagnoses root causes using AI**, and **generates pull requests with fixes** — all without human intervention.
 
-A full-stack platform where users connect their GitHub repositories and let AI automatically analyze test failures, generate code fixes, and open Pull Requests — all orchestrated through a beautiful real-time dashboard.
+![AutoHeal Dashboard](frontend/src/assets/hero.png)
 
 ---
 
-## 🏗 Architecture
+## 🚀 How It Works
 
 ```
-GitHub Push → CI Fails → Webhook → Backend → Kestra Flow
-  → AI RCA (Gemini 2.0) → Code Fix → Create PR → User Approves → Merged
+Push Code → CI Fails → GitHub Webhook → AutoHeal Backend
+                                              ↓
+                                    Fetch Failure Logs
+                                              ↓
+                                    AI Root Cause Analysis (Groq/Gemini)
+                                              ↓
+                                    AI Code Fix Generation
+                                              ↓
+                                    Create Branch → Commit Fix → Open PR
+                                              ↓
+                                    User Approves/Rejects from Dashboard
 ```
+
+## ✨ Features
+
+- **🔐 GitHub OAuth Login** — Secure authentication with encrypted tokens
+- **📦 Repository Management** — Enable/disable self-healing per repo
+- **🔔 Webhook Integration** — Automatic CI failure detection via GitHub webhooks
+- **🤖 AI-Powered RCA** — Root cause analysis using Groq (llama-3.3-70b) with Gemini fallback
+- **🔧 Autonomous Fix Generation** — AI generates targeted code fixes
+- **📤 Automated PR Creation** — Creates branch, commits fix, opens PR on GitHub
+- **✅ Approve/Reject Flow** — Merge or close AI-generated PRs from the dashboard
+- **📊 Real-Time Dashboard** — Live pipeline status, stats, and execution history
+- **🎨 Glassmorphism UI** — Dark-mode, animated, premium design
+
+## 🏗️ Architecture
+
+```
+┌─────────────────────────────────────────────────────┐
+│                    Frontend (React)                  │
+│     Login │ Dashboard │ Repos │ Pipelines │ Settings │
+└────────────────────────┬────────────────────────────┘
+                         │ JWT Auth
+┌────────────────────────┴────────────────────────────┐
+│                  Backend (Node.js/Express)            │
+│                                                      │
+│  Auth Routes ──── Repo Routes ──── Webhook Handler   │
+│       │               │                │             │
+│       │               │          ┌─────┴──────┐     │
+│       │               │          │  AI Fixer   │     │
+│       │               │          │ (Groq API)  │     │
+│       │               │          └─────┬──────┘     │
+│       │               │                │             │
+│       │               │          ┌─────┴──────┐     │
+│       │               │          │  Git Ops    │     │
+│       │               │          │ (GitHub API)│     │
+│       │               │          └────────────┘     │
+│       ▼               ▼                              │
+│            MongoDB Atlas (Encrypted Storage)         │
+└──────────────────────────────────────────────────────┘
+```
+
+## 📋 Tech Stack
 
 | Layer | Technology |
-|---|---|
-| Frontend | React.js + Tailwind CSS v3 |
-| Backend | Node.js + Express |
-| Database | MongoDB |
-| Orchestration | Kestra (Docker) |
-| AI Engine | Google Gemini 2.0 Flash |
-| Auth | GitHub OAuth 2.0 |
-| Dev Tunnel | ngrok |
+|-------|-----------|
+| Frontend | React 19, Vite 8, Tailwind CSS, Framer Motion, Lucide React |
+| Backend | Node.js, Express, Passport.js, JWT, Mongoose |
+| Database | MongoDB Atlas |
+| AI | Groq (llama-3.3-70b) — primary, Google Gemini — fallback |
+| Security | AES-256-GCM encryption, HMAC webhook verification |
+| Tunnel | ngrok (for local development) |
 
----
-
-## 📂 Project Structure
-
-```
-AutoHeal2.0/
-├── backend/           # Node.js + Express API server
-│   ├── config/        # DB connection, Passport OAuth
-│   ├── models/        # User, Repository, Execution schemas
-│   ├── routes/        # Auth, repos, webhook, executions, approval
-│   ├── middleware/     # JWT authentication
-│   ├── utils/         # GitHub API, Kestra client, encryption
-│   └── server.js      # Entry point (port 8000)
-├── frontend/          # React + Vite + Tailwind
-│   └── src/
-│       ├── components/  # Sidebar, StatusBadge, Timeline, etc.
-│       ├── contexts/    # AuthContext (JWT management)
-│       └── pages/       # Login, Dashboard, Repos, Pipeline, Settings
-├── kestra/            # Orchestration layer
-│   ├── flows/         # Self-healing pipeline YAML
-│   ├── Dockerfile     # Custom Kestra with AI plugin
-│   └── docker-compose.yml  # Kestra + MongoDB services
-└── .env.example       # Environment variable template
-```
-
----
-
-## 🚀 Quick Start
+## 🛠️ Setup
 
 ### Prerequisites
 
-- **Node.js 18+** and **npm**
-- **Docker & Docker Compose**
-- **ngrok** (`brew install ngrok`)
-- **GitHub OAuth App** ([create one](https://github.com/settings/developers))
-- **Gemini API Key** ([get one](https://aistudio.google.com/apikey))
+- Node.js 18+
+- MongoDB Atlas account
+- GitHub OAuth App
+- Groq API key (free at [console.groq.com](https://console.groq.com))
+- ngrok (for webhook delivery in dev)
 
-### 1. Clone & Configure
+### 1. Clone & Install
 
 ```bash
-git clone <your-repo-url>
-cd AutoHeal2.0
-cp .env.example backend/.env
-# Edit backend/.env with your actual keys
+git clone https://github.com/CodeByAfroj/AutoHeal.git
+cd AutoHeal
+
+# Backend
+cd backend && npm install
+
+# Frontend
+cd ../frontend && npm install
 ```
 
-### 2. Start Infrastructure (Kestra + MongoDB)
+### 2. Configure Environment
 
-```bash
-cd kestra
-docker compose up --build -d
+Create `backend/.env`:
+
+```env
+# GitHub OAuth App (https://github.com/settings/developers)
+# Callback URL: http://localhost:8000/auth/github/callback
+GITHUB_CLIENT_ID=your_client_id
+GITHUB_CLIENT_SECRET=your_client_secret
+
+# MongoDB Atlas
+MONGODB_URI=mongodb+srv://user:pass@cluster.mongodb.net/autoheal
+
+# JWT Secret (any random string)
+JWT_SECRET=your_random_jwt_secret_here
+
+# Encryption Key (64 hex chars = 32 bytes for AES-256)
+ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+
+# Groq API Key (free at https://console.groq.com/keys)
+GROQ_API_KEY=gsk_your_groq_key
+
+# Gemini API Key (optional fallback)
+GEMINI_API_KEY=
+
+# ngrok URL (update after starting ngrok)
+NGROK_URL=https://your-tunnel.ngrok-free.app
+
+# Webhook Secret
+WEBHOOK_SECRET=your_webhook_secret
+
+# Frontend
+FRONTEND_URL=http://localhost:5173
+PORT=8000
 ```
 
-This starts:
-- **Kestra** on `http://localhost:8080`
-- **MongoDB** on `localhost:27017`
-
-### 3. Import Kestra Flow
-
-1. Open `http://localhost:8080`
-2. Go to **Flows** → **Import**
-3. Import `kestra/flows/self-healing-pipeline.yaml`
-
-### 4. Start Backend
+### 3. Start Services
 
 ```bash
-cd backend
-npm install
-npm run dev
-```
-
-Backend runs on `http://localhost:8000`
-
-### 5. Start Frontend
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-Frontend runs on `http://localhost:5173`
-
-### 6. Expose Backend with ngrok
-
-```bash
+# Terminal 1: ngrok tunnel
 ngrok http 8000
+
+# Terminal 2: Backend
+cd backend && npm run dev
+
+# Terminal 3: Frontend
+cd frontend && npm run dev
 ```
 
-Copy the ngrok URL and update `NGROK_URL` in `backend/.env`.
+### 4. Enable Self-Healing
 
----
+1. Open `http://localhost:5173` → Sign in with GitHub
+2. Go to **Repositories** → Enable a repo
+3. Push buggy code → CI fails → AutoHeal creates a fix PR automatically!
 
-## 🔐 GitHub OAuth Setup
+## 📁 Project Structure
 
-1. Go to [GitHub Developer Settings → OAuth Apps](https://github.com/settings/developers)
-2. Click **New OAuth App**
-3. Fill in:
-   - **Application name**: AutoHeal 2.0
-   - **Homepage URL**: `http://localhost:5173`
-   - **Authorization callback URL**: `http://localhost:8000/auth/github/callback`
-4. Copy **Client ID** and **Client Secret** to your `.env`
+```
+AutoHeal/
+├── backend/
+│   ├── config/
+│   │   ├── db.js              # MongoDB connection
+│   │   └── passport.js        # GitHub OAuth strategy
+│   ├── middleware/
+│   │   └── auth.js            # JWT authentication
+│   ├── models/
+│   │   ├── Execution.js       # Pipeline execution records
+│   │   ├── Repository.js      # Enabled repositories
+│   │   └── User.js            # User profiles
+│   ├── routes/
+│   │   ├── approval.js        # PR approve/reject
+│   │   ├── auth.js            # GitHub OAuth flow
+│   │   ├── executions.js      # Pipeline history & status
+│   │   ├── repos.js           # Repository management
+│   │   └── webhook.js         # CI failure webhook handler
+│   ├── utils/
+│   │   ├── ai-fixer.js        # AI RCA + fix pipeline (Groq/Gemini)
+│   │   ├── crypto.js          # AES-256-GCM encryption
+│   │   ├── git-ops.js         # GitHub branch/commit/PR operations
+│   │   └── github.js          # GitHub API helpers
+│   └── server.js              # Express app entry point
+├── frontend/
+│   ├── src/
+│   │   ├── components/        # Reusable UI components
+│   │   ├── contexts/          # Auth context provider
+│   │   └── pages/             # Dashboard, Repos, Pipelines, etc.
+│   └── index.html
+└── README.md
+```
 
----
+## 🔒 Security
 
-## 🧪 How It Works
+- **Token Encryption**: GitHub access tokens encrypted with AES-256-GCM
+- **Webhook Verification**: HMAC-SHA256 signature validation
+- **JWT Sessions**: Stateless auth with 7-day expiry
+- **No secrets in code**: All credentials via environment variables
 
-1. **Login**: Sign in with GitHub OAuth
-2. **Enable Repo**: Toggle self-healing on any of your repositories
-3. **Push Buggy Code**: Push a commit that breaks CI
-4. **Auto-Detection**: GitHub webhook notifies the backend
-5. **AI Analysis**: Kestra orchestrates Gemini 2.0 to analyze the failure
-6. **Code Fix**: AI generates a minimal code fix
-7. **PR Created**: Fix is pushed to a new branch and a PR is opened
-8. **Review & Approve**: View the timeline, diff, and approve/reject from the dashboard
-
----
-
-## 📜 License
+## 📄 License
 
 MIT
+
+---
+
+Built with ❤️ by Team CodeFlux
