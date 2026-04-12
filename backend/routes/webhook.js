@@ -5,20 +5,24 @@ const Execution = require('../models/Execution');
 const User = require('../models/User');
 const { decrypt } = require('../utils/crypto');
 const { fetchWorkflowLogs } = require('../utils/github');
-const { triggerFlow } = require('../utils/kestra');
+const { runSelfHealingPipeline } = require('../utils/ai-fixer');
 const router = express.Router();
 
 /**
  * Verify GitHub webhook signature
  */
 function verifyWebhookSignature(payload, signature) {
-  if (!process.env.WEBHOOK_SECRET) return true; // Skip if no secret configured
+  if (!process.env.WEBHOOK_SECRET) return true;
 
   const hmac = crypto.createHmac('sha256', process.env.WEBHOOK_SECRET);
   hmac.update(payload);
   const digest = `sha256=${hmac.digest('hex')}`;
 
-  return crypto.timingSafeEqual(Buffer.from(digest), Buffer.from(signature));
+  try {
+    return crypto.timingSafeEqual(Buffer.from(digest), Buffer.from(signature));
+  } catch {
+    return false;
+  }
 }
 
 /*
@@ -55,7 +59,11 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
     const branch = workflowRun.head_branch;
     const runId = workflowRun.id;
 
-    console.log(`🔴 CI Failure detected: ${repoFullName} @ ${commitSha}`);
+    console.log(`\n${'='.repeat(60)}`);
+    console.log(`🔴 CI FAILURE DETECTED: ${repoFullName}`);
+    console.log(`   Commit: ${commitSha.substring(0, 7)} | Branch: ${branch}`);
+    console.log(`   Workflow: ${workflowRun.name}`);
+    console.log(`${'='.repeat(60)}`);
 
     // Find the repository in our DB
     const repo = await Repository.findOne({ fullName: repoFullName, enabled: true });
@@ -87,51 +95,54 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
 
     console.log(`📋 Execution created: ${execution._id}`);
 
-    // Fetch workflow logs
-    let errorLogs = '';
-    try {
-      errorLogs = await fetchWorkflowLogs(githubToken, repoFullName, runId);
-      execution.status = 'logs_processed';
-      execution.errorLogs = errorLogs;
-      await execution.save();
-      console.log('📄 Logs fetched and processed');
-    } catch (logError) {
-      console.error('⚠️ Failed to fetch detailed logs, continuing with basic info');
-      errorLogs = `Workflow "${workflowRun.name}" failed on commit ${commitSha}. Branch: ${branch}`;
-      execution.errorLogs = errorLogs;
-      await execution.save();
-    }
-
-    // Trigger Kestra flow
-    try {
-      const kestraResult = await triggerFlow({
-        repository: repoFullName,
-        branch: branch,
-        job_name: workflowRun.name || 'CI',
-        error_message: `CI Failed: ${workflowRun.name}`,
-        error_logs: errorLogs,
-        commit_sha: commitSha,
-        github_token: githubToken,
-        gemini_api_key: process.env.GEMINI_API_KEY || ''
-      });
-
-      execution.kestraExecutionId = kestraResult.id;
-      execution.status = 'ai_running';
-      await execution.save();
-
-      console.log(`🚀 Kestra flow triggered: ${kestraResult.id}`);
-    } catch (kestraError) {
-      console.error('❌ Failed to trigger Kestra:', kestraError.message);
-      execution.status = 'error';
-      execution.errorMessage = `Kestra trigger failed: ${kestraError.message}`;
-      await execution.save();
-    }
-
-    // Respond quickly to GitHub
+    // Respond to GitHub immediately (don't make it wait)
     res.status(200).json({
-      message: 'Webhook processed',
+      message: 'Webhook received, processing...',
       executionId: execution._id
     });
+
+    // ============================================
+    // Run the self-healing pipeline asynchronously
+    // ============================================
+    (async () => {
+      try {
+        // Step 1: Fetch workflow logs
+        console.log('📄 Fetching CI logs...');
+        let errorLogs = '';
+        try {
+          errorLogs = await fetchWorkflowLogs(githubToken, repoFullName, runId);
+          execution.status = 'logs_processed';
+          execution.errorLogs = errorLogs;
+          await execution.save();
+          console.log('✅ Logs fetched and processed');
+        } catch (logError) {
+          console.error('⚠️ Failed to fetch detailed logs, using basic info');
+          errorLogs = `Workflow "${workflowRun.name}" failed on commit ${commitSha}. Branch: ${branch}`;
+          execution.errorLogs = errorLogs;
+          execution.status = 'logs_processed';
+          await execution.save();
+        }
+
+        // Step 2-4: AI Analysis → Fix → PR (all in one)
+        const result = await runSelfHealingPipeline(
+          execution,
+          githubToken
+        );
+
+        console.log(`\n${'='.repeat(60)}`);
+        console.log(`🎉 SELF-HEALING COMPLETE!`);
+        console.log(`   PR: ${result.prUrl}`);
+        console.log(`   Fix: ${result.targetFile}`);
+        console.log(`   Root Cause: ${result.rootCause}`);
+        console.log(`${'='.repeat(60)}\n`);
+
+      } catch (pipelineError) {
+        console.error(`❌ Pipeline failed: ${pipelineError.message}`);
+        execution.status = 'error';
+        execution.errorMessage = pipelineError.message;
+        await execution.save();
+      }
+    })();
 
   } catch (error) {
     console.error('❌ Webhook processing error:', error);

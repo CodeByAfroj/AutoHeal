@@ -3,7 +3,6 @@ const authMiddleware = require('../middleware/auth');
 const Execution = require('../models/Execution');
 const User = require('../models/User');
 const { decrypt } = require('../utils/crypto');
-const { getExecutionStatus, mapKestraStatus } = require('../utils/kestra');
 const { getPRDiff } = require('../utils/github');
 const router = express.Router();
 
@@ -44,7 +43,7 @@ router.get('/stats', authMiddleware, async (req, res) => {
     const [total, successful, running, failed] = await Promise.all([
       Execution.countDocuments({ userId }),
       Execution.countDocuments({ userId, status: { $in: ['merged', 'approved'] } }),
-      Execution.countDocuments({ userId, status: { $in: ['ai_running', 'logs_processed'] } }),
+      Execution.countDocuments({ userId, status: { $in: ['ai_running', 'logs_processed', 'ci_failed', 'ai_complete'] } }),
       Execution.countDocuments({ userId, status: 'error' })
     ]);
 
@@ -85,7 +84,7 @@ router.get('/:id', authMiddleware, async (req, res) => {
 
 /*
  * GET /api/executions/:id/status
- * Poll Kestra for latest status and update local record
+ * Return current execution status (updated directly by the AI pipeline)
  */
 router.get('/:id/status', authMiddleware, async (req, res) => {
   try {
@@ -98,64 +97,22 @@ router.get('/:id/status', authMiddleware, async (req, res) => {
       return res.status(404).json({ error: 'Execution not found' });
     }
 
-    // If terminal state, return as-is
-    if (['merged', 'approved', 'rejected', 'error'].includes(execution.status)) {
-      return res.json({
-        status: execution.status,
-        detail: execution.errorMessage || 'Complete',
-        execution
-      });
-    }
-
-    // Poll Kestra if we have an execution ID
-    if (execution.kestraExecutionId) {
-      try {
-        const kestraData = await getExecutionStatus(execution.kestraExecutionId);
-        const mapped = mapKestraStatus(kestraData);
-
-        // Update local status if it advanced
-        const stageOrder = ['ci_failed', 'logs_processed', 'ai_running', 'ai_complete', 'pr_created', 'awaiting_approval'];
-        const currentIdx = stageOrder.indexOf(execution.status);
-        const newIdx = stageOrder.indexOf(mapped.stage);
-
-        if (newIdx > currentIdx || mapped.stage === 'error') {
-          execution.status = mapped.stage;
-          if (mapped.stage === 'error') {
-            execution.errorMessage = mapped.detail;
-          }
-          await execution.save();
-        }
-
-        // Try to extract PR info from Kestra outputs
-        if (kestraData.outputs && !execution.prUrl) {
-          try {
-            const prResult = kestraData.outputs.pr_result;
-            if (prResult) {
-              const pr = JSON.parse(prResult);
-              if (pr.pr_url) {
-                execution.prUrl = pr.pr_url;
-                execution.prNumber = pr.pr_number;
-                execution.status = 'pr_created';
-                await execution.save();
-              }
-            }
-          } catch (parseErr) { /* ignore parse errors on outputs */ }
-        }
-
-        return res.json({
-          status: execution.status,
-          detail: mapped.detail,
-          execution
-        });
-      } catch (kestraError) {
-        // Kestra may be unreachable; return current state
-        console.warn('Kestra poll failed:', kestraError.message);
-      }
-    }
+    const statusMessages = {
+      ci_failed: 'CI failure detected, fetching logs...',
+      logs_processed: 'Logs analyzed, starting AI...',
+      ai_running: 'AI is analyzing the root cause and generating a fix...',
+      ai_complete: 'AI fix generated, creating PR...',
+      pr_created: 'Pull request created — awaiting review',
+      awaiting_approval: 'Waiting for user approval',
+      approved: 'Fix approved and merged',
+      merged: 'Fix merged successfully',
+      rejected: 'Fix was rejected',
+      error: execution.errorMessage || 'Pipeline error'
+    };
 
     res.json({
       status: execution.status,
-      detail: 'Polling...',
+      detail: statusMessages[execution.status] || 'Processing...',
       execution
     });
   } catch (error) {

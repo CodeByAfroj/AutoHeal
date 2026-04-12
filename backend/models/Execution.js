@@ -52,7 +52,8 @@ const executionSchema = new mongoose.Schema({
     rootCause: { type: String, default: '' },
     targetFile: { type: String, default: '' },
     fixPlan: { type: String, default: '' },
-    confidenceScore: { type: Number, default: 0 }
+    confidenceScore: { type: Number, default: 0 },
+    errorType: { type: String, default: '' }
   },
   prUrl: {
     type: String,
