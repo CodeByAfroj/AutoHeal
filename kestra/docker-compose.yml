@@ -1,0 +1,35 @@
+services:
+  # Kestra Orchestrator
+  kestra:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: kestra-autoheal
+    ports:
+      - "8080:8080"
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+    environment:
+      KESTRA_CONFIGURATION: |
+        kestra:
+          variables:
+            env-vars-prefix: ""
+          repository:
+            type: memory
+          storage:
+            type: local
+            local:
+              base-path: /app/storage
+        micronaut:
+          security:
+            enabled: false
+    command: server local
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./flows:/app/flows:ro
+      - kestra-data:/app/storage
+    user: root
+
+volumes:
+  kestra-data:
