@@ -2,7 +2,27 @@
 
 AutoHeal 2.0 is a full-stack SaaS platform that **automatically detects CI/CD failures**, **diagnoses root causes using AI**, and **generates pull requests with fixes** — all without human intervention.
 
-![AutoHeal Dashboard](frontend/src/assets/hero.png)
+
+## 🖼️ Product Showcase
+
+<p align="center">
+  <img src="frontend/public/Landing.png" width="100%" alt="AutoHeal Landing">
+  <br>
+  <b>The Command Center</b>: A high-fidelity, interactive hub for autonomous CI.
+</p>
+
+<p align="center">
+  <img src="frontend/public/repo.png" width="48%" alt="Repository Management">
+  <img src="frontend/public/pipeline.png" width="48%" alt="Pipeline Flow">
+  <br>
+  <b>Seamless Control</b>: Manage repository connections and monitor live healing pipelines in real-time.
+</p>
+
+<p align="center">
+  <img src="frontend/public/running_pipeline.png" width="100%" alt="Running Pipeline">
+  <br>
+  <b>Live RCA</b>: Detailed AI-driven root cause analysis and fix generation in action.
+</p>
 
 ---
 

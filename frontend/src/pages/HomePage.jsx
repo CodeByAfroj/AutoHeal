@@ -510,7 +510,7 @@ export default function HomePage() {
 
                                 {/* Connector 1: RAG -> Synthesis (Horizontal) */}
                                 <path d="M 450 200 L 550 200" stroke="rgba(34, 211, 238, 0.1)" strokeWidth="2" fill="none" />
-                                <motion.circle 
+                                <motion.circle
                                     cx="450" cy="200" r="3" fill="#22d3ee" filter="url(#glow)"
                                     animate={{ cx: [450, 550], opacity: [0, 1, 0] }}
                                     transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
@@ -518,7 +518,7 @@ export default function HomePage() {
 
                                 {/* Connector 2: Synthesis -> Shadow Branch (Vertical) */}
                                 <path d="M 750 350 L 750 450" stroke="rgba(34, 211, 238, 0.1)" strokeWidth="2" fill="none" />
-                                <motion.circle 
+                                <motion.circle
                                     cx="750" cy="350" r="3" fill="#22d3ee" filter="url(#glow)"
                                     animate={{ cy: [350, 450], opacity: [0, 1, 0] }}
                                     transition={{ duration: 2, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
@@ -526,7 +526,7 @@ export default function HomePage() {
 
                                 {/* Connector 3: Shadow Branch -> Verified PR (Horizontal) */}
                                 <path d="M 550 600 L 450 600" stroke="rgba(34, 211, 238, 0.1)" strokeWidth="2" fill="none" />
-                                <motion.circle 
+                                <motion.circle
                                     cx="550" cy="600" r="3" fill="#22d3ee" filter="url(#glow)"
                                     animate={{ cx: [550, 450], opacity: [0, 1, 0] }}
                                     transition={{ duration: 2, repeat: Infinity, ease: "easeInOut", delay: 1 }}
