@@ -4,6 +4,7 @@ const User = require('../models/User');
 const Repository = require('../models/Repository');
 const { decrypt } = require('../utils/crypto');
 const { fetchUserRepos, createWebhook, deleteWebhook } = require('../utils/github');
+const { ingestRepository } = require('../utils/ingestor');
 const router = express.Router();
 
 // Simple in-memory cache to store GitHub repositories
@@ -130,6 +131,15 @@ router.post('/:repoId/enable', authMiddleware, async (req, res) => {
       repository: repo,
       webhookId: webhookId
     });
+
+    // ==========================================
+    // 🧠 ASYNCHRONOUS BACKGROUND RAG INDEXING
+    // ==========================================
+    const targetBranch = defaultBranch || 'main';
+    ingestRepository(repo._id, fullName, token, targetBranch).catch(err => {
+      console.error(`Background ingestion failed for ${fullName}:`, err.message);
+    });
+
   } catch (error) {
     console.error('Error enabling repo:', error.message);
     res.status(500).json({ error: 'Failed to enable self-healing' });

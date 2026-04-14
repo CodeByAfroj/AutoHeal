@@ -9,6 +9,11 @@ const { runSelfHealingPipeline } = require('../utils/ai-fixer');
 const { deleteBranch, createPR } = require('../utils/git-ops');
 const router = express.Router();
 
+// 🛡️ NATIVE NODE.JS MEMORY MUTEX
+// Because Node is single-threaded, using an in-memory Set prevents all parallel webhook duplication 
+// instantly without suffering from async MongoDB latency overhead!
+const activeWebhookLocks = new Set();
+
 /**
  * Verify GitHub webhook signature
  */
@@ -57,6 +62,17 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
     const commitSha = workflowRun.head_sha;
     const branch = workflowRun.head_branch;
     const runId = workflowRun.id;
+
+    // ============================================
+    // 🏎️ SYNCHRONOUS MUTEX LOCK
+    // Blocks multiple parallel failing workflows (e.g. Lint & Test) executing on the same commit!
+    // ============================================
+    const lockKey = branch.startsWith('fix/autoheal-') ? branch : commitSha;
+    if (activeWebhookLocks.has(lockKey)) {
+       return res.status(200).json({ message: 'Mutex locked. Webhook dropped to prevent AI Overlaps.' });
+    }
+    activeWebhookLocks.add(lockKey);
+    setTimeout(() => activeWebhookLocks.delete(lockKey), 1000 * 60 * 5); // Automatically release after 5 mins
 
     // Retrieve repository configuration
     const repo = await Repository.findOne({ fullName: repoFullName, enabled: true });
@@ -118,10 +134,8 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
           console.error(`⚠️ Could not automatically delete branch ${branch}`);
         }
 
-        existingExecution.status = 'error';
-        existingExecution.errorMessage = 'AI logic failed validation. Branch deleted.';
-        await existingExecution.save();
-
+        // We no longer save existingExecution as 'error' here because we will delete it 
+        // entirely after cloning its data into the retry execution, keeping the UI clean.
         // ============================================
         // ♻️ SMART RETRY LOOP
         // ============================================
@@ -165,11 +179,14 @@ You successfully generated a fix, but when deployed to a test branch, the pipeli
 ${existingExecution.errorMessage}
 ${existingExecution.errorLogs}
 
-=== THE RESULTS (NEW FAILURE LOGS) ===
-${shadowLogs}
+=== THE RESULTS (NEW FAILURE LOGS, LAST 4000 CHARS) ===
+${shadowLogs.length > 4000 ? shadowLogs.slice(-4000) : shadowLogs}
 
 Analyze why your last fix was insufficient or caused new errors. Generate a COMPLETELY NEW strategy to fix the codebase.`;
         await retryExecution.save();
+
+        // 🗑️ Delete the original failed execution so the frontend UI stays clean
+        await Execution.findByIdAndDelete(existingExecution._id);
 
         // Fire the pipeline background worker
         runSelfHealingPipeline(retryExecution, githubToken).catch(async (err) => {
@@ -195,6 +212,15 @@ Analyze why your last fix was insufficient or caused new errors. Generate a COMP
     console.log(`   Commit: ${commitSha.substring(0, 7)} | Branch: ${branch}`);
     console.log(`   Workflow: ${workflowRun.name}`);
     console.log(`${'='.repeat(60)}`);
+
+    // 🛡️ ATOMIC COMMIT LOCK 
+    // If a pipeline already exists for this EXACT Git commit, ignore all other incoming webhooks.
+    // (Prevents 10 failing workflows from launching 10 concurrent AI Agents causing Git 409 Conflicts!)
+    const activeLock = await Execution.findOne({ commitSha });
+    if (activeLock) {
+      console.log(`       [Commit Lock] AutoHeal is already handling commit ${commitSha.substring(0,7)}. Ignoring duplicate/concurrent failure.`);
+      return res.status(200).json({ message: 'A pipeline is already actively healing this commit.' });
+    }
 
     // Infinite Loop Protector
     const hourAgoMain = new Date(Date.now() - 60 * 60 * 1000);

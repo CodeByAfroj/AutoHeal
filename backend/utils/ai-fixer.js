@@ -90,33 +90,63 @@ async function runSelfHealingPipeline(execution, githubToken) {
     console.warn('Could not fetch repo tree:', e.message);
   }
 
+  // ============================================
+  // STEP 1.5: RAG Vector Search (Atlas)
+  // ============================================
+  const { findRelevantCodeChunks } = require('./rag');
+  let ragContext = "";
+  try {
+    console.log('🔍 Querying MongoDB Vector Database for semantic matches...');
+    // Search the vector DB using the last 1000 characters of the error log
+    const errorSnippet = errorLogs.length > 1000 ? errorLogs.slice(-1000) : errorLogs;
+    const chunks = await findRelevantCodeChunks(errorSnippet, execution.repositoryId);
+    
+    if (chunks && chunks.length > 0) {
+      ragContext = `\n## RAG VECTOR DATABASE MATCHES:\n(The following code chunks were mathematically identified as highly relevant to the error logs)\n\n`;
+      chunks.forEach(c => {
+         ragContext += `--- FILE: ${c.filePath} | FUNCTION: ${c.functionName} ---\n${c.codeContent}\n\n`;
+      });
+      console.log(`✅ RAG identified ${chunks.length} semantically relevant code chunks!`);
+    } else {
+      console.log('⚠️ No RAG matches found. (Repository might not be fully indexed).');
+    }
+  } catch (e) {
+    if (e.message.includes('GEMINI_API_KEY')) {
+      console.log('⚠️ RAG skipped: GEMINI_API_KEY is not configured yet.');
+    } else {
+      console.warn('⚠️ Vector Search error:', e.message);
+    }
+  }
+
   const rcaPrompt = `
 You are a Senior Site Reliability Engineer. Analyze this CI failure.
 
 ## CRITICAL RULES
 1. **Target Files:** Identify up to 3 files that must be read to understand and fix the bug (e.g., the failing test file AND the suspected source code file).
-2. **Fix Plan:** Provide a clear fix strategy. NEVER suggest changing a test expectation just to pass a test; fix the underlying logic.
-3. **Holistic Audit:** Do not just focus on the single line that temporarily crashed the CI. Instruct the fix agent to broadly audit and fix ALL obvious syntax errors or logic bugs in these files to prevent future failures.
+2. **Fix Plan:** Provide a clear fix strategy. **KEEP IT EXTREMELY SHORT** (Maximum 2 brief sentences). NO bulky paragraphs. NO polite chat. Explain exactly what to edit.
+3. **Holistic Audit:** Do not focus only on the crashing line. Fix ALL obvious syntax errors or logic bugs in these files.
+4. **Security Hardening:** NEVER target, select, or modify ANY file located inside the '.github/' directory natively. The API tokens do not have workflow modification scopes and attempting to fix them will cause a fatal 404 crash.
 
 ## Repository: ${repo} | Branch: ${branch}
 
 ## Repository Files:
-${repoFiles.slice(0, 40).join('\n')}
-
-## Error Logs:
-${errorLogs.substring(0, 6000)}
+${repoFiles.slice(0, 50).join('\n')}
+${ragContext}
+## Error Logs (Last 4000 chars):
+${errorLogs.length > 4000 ? errorLogs.slice(-4000) : errorLogs}
 
 ## Return ONLY a valid JSON object (no markdown formatting):
 {
   "error_type": "string",
   "files_to_read": ["path/to/test_file.js", "path/to/source.js"],
-  "root_cause": "Clear description of the root cause",
-  "fix_plan": "Specific plan to fix the bug",
+  "root_cause": "EXACT error only. Maximum 1-2 short sentences. No large explanations.",
+  "fix_plan": "Exact solution. Maximum 1-2 short sentences. Do not hallucinate massive paragraphs.",
   "confidence_score": 0.9
 }`;
 
   let rca;
   try {
+    // RCA strictly doesn't need many max tokens as we only ask for JSON
     const rcaText = await callAI(rcaPrompt, 1000);
     const cleanJson = rcaText.replace(/```[a-z]*\n|```/g, '').trim();
     rca = JSON.parse(cleanJson);
@@ -139,7 +169,8 @@ ${errorLogs.substring(0, 6000)}
   // ============================================
   // STEP 2: Read multiple files from GitHub
   // ============================================
-  const filesToRead = (rca.files_to_read || []).slice(0, 3).filter(Boolean);
+  // Increased to 5 files to catch nested Python imports/config files perfectly!
+  const filesToRead = (rca.files_to_read || []).slice(0, 5).filter(Boolean);
   if (filesToRead.length === 0) {
     throw new Error('No files identified by AI to read');
   }
@@ -173,30 +204,60 @@ You are an Autonomous Senior Software Engineer. Fix a confirmed bug.
 
 ## RULES
 1. Return ONLY a valid JSON OBJECT containing a "files" array representing the files you fixed.
-2. Format: { "files": [{"filePath": "path/string", "content": "ENTIRE MODIFIED FILE WITH ALL BUGS FIXED"}] }
-3. "content" MUST be the full, complete file (keep all original imports, code, and structures intact). Do NOT output snippets!
-4. **HOLISTIC REPAIR:** While resolving the Root Cause is your primary goal, you MUST boldly review the entire file for ANY other syntax errors, typos, or logic bugs (e.g., missed operators, bad returns) and fix ALL of them in the final code. Do not wait for the pipeline to fail again!
-5. **JSON COMPLIANCE:** The JSON must be strictly valid. Do NOT use Python-style triple quotes (\`\"\"\"\`) to wrap your strings. Use standard double quotes (\`\"\`) and explicitly escape all newlines with \`\\n\`.
+2. Format: { "files": [{"filePath": "path/string", "replacements": [{"startLine": number, "endLine": number, "replace": "new code"}]}] }
+3. You MUST use the "replacements" array to specify blocks of lines to rewrite. "replace" must contain the exact new code that will substitute the original lines from "startLine" to "endLine" (inclusive).
+4. "startLine" and "endLine" are 1-based, matching the line numbers provided in the SOURCE FILES Context.
+5. **PYTHON/SYNTAX INDENTATION:** You MUST flawlessly preserve the exact indentation (spaces/tabs) of the block you are replacing. If fixing Python, missing spacing will cause IndentationErrors and fail the CI autonomously!
+6. **HOLISTIC REPAIR:** Fix ALL obvious syntax errors or logic bugs in these files. Provide multiple replacement blocks if needed.
+7. **JSON COMPLIANCE:** The JSON must be strictly valid. Do NOT use Python-style triple quotes (\`\"\"\"\`) to wrap your strings. Use standard double quotes (\`\"\`) and explicitly escape all newlines with \`\\n\`.
+8. CRITICAL: To reduce tokens, **DO NOT output the entire file**. Only output the line blocks you are replacing!
+9. **PYTHON IMPORT HACK:** If the error is a pytest 'ModuleNotFoundError', 'ImportError', or 'No module named...', ALWAYS inject this exact block at the very top of the failing test file: \`import sys, os; sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src')))\`. This solves the issue instantly!
 
-## SOURCE FILES Context:
-${filesContext.map(f => `--- FILE: ${f.path} ---\n${f.content}\n-----------------------`).join('\n\n')}`;
+## SOURCE FILES Context (with line numbers):
+${filesContext.map(f => {
+  const numberedContent = f.content.split('\n').map((line, idx) => `${idx + 1}: ${line}`).join('\n');
+  return `--- FILE: ${f.path} ---\n${numberedContent}\n-----------------------`;
+}).join('\n\n')}`;
 
   let fixedFiles = [];
-  try {
-    // Keep maxTokens at 3000 to avoid hitting the 6000 Tokens Per Minute limit!
-    const fixText = await callAI(fixPrompt, 3000);
-    const cleanFixJson = fixText.replace(/```[a-z]*\n|```/g, '').trim();
-    const parsedData = JSON.parse(cleanFixJson);
-    fixedFiles = parsedData.files || [];
-  } catch (e) {
-    throw new Error(`AI fix code generation failed: ${e.message}`);
+  let jsonRetries = 3;
+  
+  while (jsonRetries > 0) {
+    try {
+      // Keep maxTokens at 3000 to avoid hitting the 6000 Tokens Per Minute limit!
+      const fixText = await callAI(fixPrompt, 3000);
+      const cleanFixJson = fixText.replace(/```[a-z]*\n|```/g, '').trim();
+      const parsedData = JSON.parse(cleanFixJson);
+      fixedFiles = parsedData.files || [];
+      break; // Success! Break out of the retry loop.
+    } catch (e) {
+      jsonRetries--;
+      if (jsonRetries === 0) {
+        throw new Error(`AI generated malformed JSON heavily (SyntaxError): ${e.message}`);
+      }
+      console.warn(`   ⚠️ AI JSON parse failed (likely quote escaping issue). Retrying... (${e.message})`);
+    }
   }
 
   if (!Array.isArray(fixedFiles) || fixedFiles.length === 0) {
     throw new Error('AI generated no file updates or invalid format');
   }
 
-  // Ensure an actual change was made natively (no complex patching needed)
+  // 🛡️ DEDUPLICATION ALGORITHM: Merge multiple JSON objects targeting the same file
+  // If the AI hallucinates [ {file: A, replace: X}, {file: A, replace: Y} ], this merges them into {file: A, replace: [X,Y]}
+  // This prevents the AI from overwriting its own code and stops multiple sequentially-crashing 409 GitHub Push requests!
+  const mergedFilesMap = new Map();
+  for (const fix of fixedFiles) {
+    if (!fix.filePath || !Array.isArray(fix.replacements)) continue;
+    if (mergedFilesMap.has(fix.filePath)) {
+      mergedFilesMap.get(fix.filePath).replacements.push(...fix.replacements);
+    } else {
+      mergedFilesMap.set(fix.filePath, { filePath: fix.filePath, replacements: [...fix.replacements] });
+    }
+  }
+  fixedFiles = Array.from(mergedFilesMap.values());
+
+  // Ensure actual changes were applied accurately
   let actualChanges = 0;
   for (const fix of fixedFiles) {
     const original = filesContext.find(f => f.path === fix.filePath);
@@ -205,10 +266,34 @@ ${filesContext.map(f => `--- FILE: ${f.path} ---\n${f.content}\n----------------
       continue;
     }
 
-    if (fix.content && fix.content !== original.content && fix.content.trim() !== '') {
-      actualChanges++;
-    } else {
-      fix.failedPatch = true; // No change actually made
+    try {
+      if (fix.replacements && Array.isArray(fix.replacements) && fix.replacements.length > 0) {
+        let lines = original.content.split('\n');
+        
+        // Sort replacements descending to avoid shifting line numbers as we apply patches
+        const sortedReplacements = [...fix.replacements].sort((a, b) => b.startLine - a.startLine);
+        
+        for (const r of sortedReplacements) {
+          const startIdx = r.startLine - 1;
+          const endIdx = r.endLine - 1;
+          
+          if (startIdx >= 0 && endIdx < lines.length && startIdx <= endIdx) {
+            const replaceLines = r.replace.split('\n');
+            lines.splice(startIdx, endIdx - startIdx + 1, ...replaceLines);
+            actualChanges++;
+          } else {
+             throw new Error(`Invalid line range: ${r.startLine}-${r.endLine}`);
+          }
+        }
+        
+        // Save the patched content back onto the fix object so the native commit flow works
+        fix.content = lines.join('\n');
+      } else {
+        fix.failedPatch = true; // No replacements found
+      }
+    } catch (e) {
+      console.warn(`⚠️ Patch application failed for ${fix.filePath}: ${e.message}`);
+      fix.failedPatch = true;
     }
   }
 
@@ -241,8 +326,23 @@ ${filesContext.map(f => `--- FILE: ${f.path} ---\n${f.content}\n----------------
     for (const fileFix of fixedFiles) {
       const original = filesContext.find(f => f.path === fileFix.filePath);
       const sha = original ? original.sha : undefined; // if undefined, it's a new file
-      await updateFile(githubToken, repo, fileFix.filePath, fileFix.content, commitMsg, fixBranch, sha);
-      console.log(`  ✅ Fix committed to ${fileFix.filePath}`);
+      
+      let retries = 3;
+      while (retries > 0) {
+        try {
+          await updateFile(githubToken, repo, fileFix.filePath, fileFix.content, commitMsg, fixBranch, sha);
+          console.log(`  ✅ Fix committed to ${fileFix.filePath}`);
+          break;
+        } catch (e) {
+          if (e.response && e.response.status === 409 && retries > 1) {
+            console.log(`  ⚠️ GitHub API Race Condition (409) detected on ${fileFix.filePath}. Retrying in 2s...`);
+            await new Promise(r => setTimeout(r, 2000));
+            retries--;
+          } else {
+            throw e;
+          }
+        }
+      }
     }
 
     const prTitle = `🤖 AutoHeal Fix: ${(rca.root_cause || 'Automated multi-file fix').substring(0, 60)}`;

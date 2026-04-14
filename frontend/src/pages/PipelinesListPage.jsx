@@ -101,7 +101,7 @@ export default function PipelinesListPage() {
       ) : executions.length > 0 ? (
         <>
           <div className="space-y-3">
-            {executions.map((exec, i) => (
+            {executions.filter(e => e.status !== 'error').map((exec, i) => (
               <ExecutionCard key={exec._id} execution={exec} index={i} />
             ))}
           </div>

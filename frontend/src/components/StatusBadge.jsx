@@ -8,22 +8,22 @@ const statusConfig = {
     pulse: true
   },
   logs_processed: {
-    label: 'Logs Processed',
+    label: 'Analyzing Crash Logs',
     color: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
     dot: 'bg-amber-400',
     pulse: true
   },
   ai_running: {
-    label: 'AI Running',
+    label: 'AI Generating Patch...',
     color: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
     dot: 'bg-purple-400',
     pulse: true
   },
   ai_complete: {
-    label: 'AI Complete',
-    color: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
-    dot: 'bg-cyan-400',
-    pulse: false
+    label: 'Validating Fix (Waiting for CI)...',
+    color: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+    dot: 'bg-blue-400',
+    pulse: true
   },
   pr_created: {
     label: 'PR Created',

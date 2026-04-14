@@ -1,11 +1,27 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
-import { Settings, User, Shield, Webhook, ExternalLink, Copy, Check } from 'lucide-react';
+import { Settings, User, Shield, Webhook, ExternalLink, Copy, Check, Activity, AlertCircle } from 'lucide-react';
 
 export default function SettingsPage() {
-  const { user } = useAuth();
+  const { user, apiFetch } = useAuth();
   const [copied, setCopied] = useState(false);
+  const [timeline, setTimeline] = useState([]);
+
+  useEffect(() => {
+    const fetchTimeline = async () => {
+      try {
+        const res = await apiFetch(`/api/executions?limit=15`);
+        if (res.ok) {
+          const data = await res.json();
+          setTimeline(data.executions);
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    };
+    fetchTimeline();
+  }, []);
 
   const copyWebhookUrl = () => {
     const url = 'http://localhost:8000/webhook/github';
@@ -120,6 +136,40 @@ export default function SettingsPage() {
           </p>
         </div>
       </motion.div>
+
+      {/* Execution Timeline (Audit Logs) */}
+      <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          className="glass-card p-6"
+        >
+          <h2 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
+            <Activity className="w-4 h-4 text-heal-cyan" />
+            Raw Execution Timeline (Audit Logs)
+          </h2>
+          <div className="space-y-2">
+            {timeline.length > 0 ? timeline.map(exec => (
+              <div key={exec._id} className="p-3 bg-navy-900/50 rounded-lg flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-gray-200">
+                    {exec.repoFullName} <span className="text-xs text-gray-500 font-normal">({new Date(exec.createdAt).toLocaleString()})</span>
+                  </p>
+                  <p className={`text-xs mt-1 truncate max-w-md ${exec.status === 'error' ? 'text-red-400' : 'text-gray-400'}`}>
+                    {exec.errorMessage || `Status: ${exec.status}`}
+                  </p>
+                </div>
+                {exec.status === 'error' ? (
+                  <AlertCircle className="w-4 h-4 text-red-500" />
+                ) : (
+                  <Check className="w-4 h-4 text-heal-green" />
+                )}
+              </div>
+            )) : (
+              <p className="text-xs text-gray-500 text-center py-4">No execution logs found.</p>
+            )}
+          </div>
+        </motion.div>
     </div>
   );
 }

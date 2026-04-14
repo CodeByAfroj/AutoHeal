@@ -27,12 +27,14 @@ Push Code → CI Fails → GitHub Webhook → AutoHeal Backend
 - **🔐 GitHub OAuth Login** — Secure authentication with encrypted tokens
 - **📦 Repository Management** — Enable/disable self-healing per repo
 - **🔔 Webhook Integration** — Automatic CI failure detection via GitHub webhooks
-- **🤖 AI-Powered RCA** — Root cause analysis using Groq (llama-3.3-70b) with Gemini fallback
-- **🔧 Autonomous Fix Generation** — AI generates targeted code fixes
+- **🧠 Semantic Vector Search (RAG)** — 100% offline, local codebase mapping using Hugging Face's `all-MiniLM-L6-v2` via Xenova (Zero API limits)
+- **🤖 AI-Powered RCA** — Root cause analysis using Groq (llama-3.3-70b) with Smart Fallbacks
+- **🔧 Autonomous Fix Generation** — Generates and natively patches code inside memory without full-file rewrites
 - **📤 Automated PR Creation** — Creates branch, commits fix, opens PR on GitHub
+- **👻 Shadow Branching** — Offloads 100% of pipeline validation testing to GitHub Actions
+- **♻️ Smart Retry Loops** — Intelligently loops fix-attempts automatically if test validations fail
 - **✅ Approve/Reject Flow** — Merge or close AI-generated PRs from the dashboard
 - **📊 Real-Time Dashboard** — Live pipeline status, stats, and execution history
-- **🎨 Glassmorphism UI** — Dark-mode, animated, premium design
 
 ## 🏗️ Architecture
 
@@ -67,8 +69,9 @@ Push Code → CI Fails → GitHub Webhook → AutoHeal Backend
 |-------|-----------|
 | Frontend | React 19, Vite 8, Tailwind CSS, Framer Motion, Lucide React |
 | Backend | Node.js, Express, Passport.js, JWT, Mongoose |
-| Database | MongoDB Atlas |
-| AI | Groq (llama-3.3-70b) — primary, Google Gemini — fallback |
+| Database | MongoDB Atlas (Standard + `$vectorSearch` indexes) |
+| Core AI | Groq (llama-3.3-70b-versatile) |
+| Offline Embeddings | Xenova Transformers WebAssembly (`all-MiniLM-L6-v2`), `web-tree-sitter` (AST) |
 | Security | AES-256-GCM encryption, HMAC webhook verification |
 | Tunnel | ngrok (for local development) |
 
@@ -105,7 +108,7 @@ Create `backend/.env`:
 GITHUB_CLIENT_ID=your_client_id
 GITHUB_CLIENT_SECRET=your_client_secret
 
-# MongoDB Atlas
+# MongoDB Atlas (Ensure you have a Search Index setup for Vectors!)
 MONGODB_URI=mongodb+srv://user:pass@cluster.mongodb.net/autoheal
 
 # JWT Secret (any random string)
@@ -117,7 +120,7 @@ ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
 # Groq API Key (free at https://console.groq.com/keys)
 GROQ_API_KEY=gsk_your_groq_key
 
-# Gemini API Key (optional fallback)
+# Gemini API Key (No longer strictly required!)
 GEMINI_API_KEY=
 
 # ngrok URL (update after starting ngrok)

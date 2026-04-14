@@ -117,3 +117,63 @@ One of the most revolutionary architectural optimizations in AutoHeal is **Shado
 - **Zero Server Overhead:** Simulating complex containerized CI environments locally on AWS or Heroku is a phenomenally expensive nightmare. Shadow Branching makes the AutoHeal brain completely weightless and incredibly cheap to host.
 - **Trash Collection (No PR Pollution):** Developers universally hate waking up to unfinished, broken Pull Requests from amateur AI bots. Because the Shadow Branch is structurally hidden and aggressively destroyed if tests fail, Developers *only* ever see verified, 100% test-passing Pull Requests. AutoHeal hides the sausage-making process.
 - **Decoupled Language Support:** AutoHeal doesn't need custom logic to figure out if it should execute `npm test`, `pytest`, or `mvn test`. It relies purely on the user's pre-existing GitHub Actions workflows as the absolute source of truth.
+
+---
+
+## 7. RAG (Retrieval-Augmented Generation) and Vector Search with MongoDB Atlas
+
+To bypass expensive multi-file brute force context mapping (which wastes tokens and risks missing critical dependencies in massive codebases), AutoHeal 2.0 leverages **RAG** using **MongoDB Atlas Vector Search**.
+
+### How Code Retrieval Works in AutoHeal
+Instead of just guessing which file caused an error based on a file path string, AutoHeal mathematically graphs the internal codebase and searches it algebraically during a crash.
+
+1. **The Abstract Syntax Tree (AST) Skeletonization & Chunking:**
+   When a codebase is synced, AutoHeal does not store plain raw text. Instead, it runs an AST Parser (like `web-tree-sitter`) over the repository. The AST parses the code and strips away arbitrary formatting, breaking the files down strictly into individual logical "Chunks" (e.g., individual Class Methods or Functions).
+   
+2. **Generating Vector Embeddings:**
+   Each Code Chunk is passed to a high-speed embedding model (like `Google text-embedding-004`). The AI mathematically maps the *semantic meaning* and *intent* of the code into an array of floating-point numbers (a Vector).
+
+3. **Storage in MongoDB Atlas:**
+   Because AutoHeal utilizes MongoDB Atlas, there is zero need for external vector databases like Pinecone or Qdrant. The Code Chunks and their associated Vector arrays are stored directly in a standard Mongoose Collection (`CodeChunk.js`).
+
+### How to Create a Vector Index in MongoDB Atlas
+To make MongoDB capable of understanding semantic queries, you must enable a Vector Index on the cluster from the Atlas web interface:
+1. Log into MongoDB Atlas and open your active AutoHeal Cluster.
+2. Navigate to **Atlas Search** -> **Create Search Index** -> **JSON Editor**.
+3. Target the `autoheal` database and the `codechunks` collection.
+4. Input the following index configuration:
+```json
+{
+  "fields": [
+    {
+      "numDimensions": 768,
+      "path": "embedding",
+      "similarity": "cosine",
+      "type": "vector"
+    }
+  ]
+}
+```
+*(Note: Ensure `numDimensions` matches your exact embedding model's output).*
+
+### The "Crash Retrieval" Pipeline
+When the GitHub Webhook detects a CI failure, AutoHeal grabs the `TypeError` logs and converts the error text directly into an embedding vector. 
+Using the `$vectorSearch` pipeline stage within Mongoose, MongoDB algebraically scans millions of Code Chunks in milliseconds to find the function whose Vector is most similar (smallest cosine distance) to the Crash Error Vector. 
+AutoHeal instantly retrieves the exact broken function with surgical precision and hands it directly to the AI Fixer, eliminating the need to ever send massive, raw repository trees during the RCA phase!
+
+---
+
+## 8. The Automated Ingestion Engine (Stocking the Vector DB)
+
+Vector Search (RAG) is useless if the database is empty. To make the system fully autonomous, AutoHeal utilizes a silent **Background Ingestion Engine** that automatically creates and manages your vector embeddings mathematically.
+
+### How Code Gets Into MongoDB
+When a user clicks **"Enable"** on a repository in the AutoHeal Dashboard:
+1. **Instant UI Response:** The server instantly replies `200 OK` to the frontend. The UI toggles to green immediately so the user never has to wait.
+2. **Background Threading:** The backend silently spawns an independent, non-blocking background worker (`ingestor.js`).
+3. **Temporal Cloning:** The worker bypasses strict GitHub API rate limits by accessing the shell natively and running `git clone --depth 1` straight into the server's isolated `/tmp` directory. It securely downloads the entire repository in milliseconds.
+4. **Recursive AST Filtering:** It crawls the downloaded repository, completely ignoring heavy infrastructure folders like `node_modules` or `.git`. It targets strictly logic files (`.js`, `.py`, `.java`, etc.).
+5. **Slicing and Embedding:** Each file is fed into the `web-tree-sitter` AST parser. It slices the file up into individual Functions and Classes, fires each one to Google Gemini to get its 768-dimension Vector Array, and pushes it natively into MongoDB.
+6. **Self-Destruction (Security):** The worker immediately triggers an `rm -rf` command, deleting the `/tmp` clone to aggressively protect server disk memory and comply with code privacy.
+
+The Vector Database is now fully stocked, and the AutoHeal Agent is permanently armed with semantic codebase knowledge for future pipeline explosions!

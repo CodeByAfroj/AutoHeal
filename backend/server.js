@@ -17,10 +17,25 @@ const approvalRoutes = require('./routes/approval');
 const app = express();
 const PORT = process.env.PORT || 8000;
 
+const Execution = require('./models/Execution');
+
 // ============================================
-// Database Connection
+// Database Connection & Boot Sweep
 // ============================================
-connectDB();
+connectDB().then(async () => {
+  try {
+    // 🧹 Sweep up any 'Ghost Pipelines' that got stuck when Node restarted mid-execution
+    const orphans = await Execution.updateMany(
+      { status: { $in: ['ci_failed', 'logs_processed', 'ai_running', 'validating_shadow'] } },
+      { $set: { status: 'error', errorMessage: 'Pipeline forcefully terminated (Backend Restarted).' } }
+    );
+    if (orphans.modifiedCount > 0) {
+      console.log(`  🧹 Swept ${orphans.modifiedCount} stuck/orphaned pipelines from the previous session.`);
+    }
+  } catch (err) {
+    console.warn('Failed to run orphan sweep:', err.message);
+  }
+});
 
 // ============================================
 // Middleware

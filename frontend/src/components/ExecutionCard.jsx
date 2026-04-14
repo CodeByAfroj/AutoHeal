@@ -1,11 +1,48 @@
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import StatusBadge from './StatusBadge';
 import { GitCommit, Clock, FolderGit2 } from 'lucide-react';
 
+function LiveTimer({ startTime, status }) {
+  const [elapsed, setElapsed] = useState('');
+
+  useEffect(() => {
+    const isFinished = ['pr_created', 'approved', 'merged', 'rejected', 'error'].includes(status);
+    
+    const update = () => {
+      const start = new Date(startTime);
+      const diff = Math.floor((new Date() - start) / 1000);
+      
+      if (isFinished) {
+        // If done, show static time-ago format
+        if (diff < 60) setElapsed(`${diff}s ago`);
+        else if (diff < 3600) setElapsed(`${Math.floor(diff / 60)}m ago`);
+        else if (diff < 86400) setElapsed(`${Math.floor(diff / 3600)}h ago`);
+        else setElapsed(`${Math.floor(diff / 86400)}d ago`);
+        return;
+      }
+      
+      // If actively running, show a live minute:second stopwatch counter
+      const m = Math.floor(diff / 60).toString().padStart(2, '0');
+      const s = (diff % 60).toString().padStart(2, '0');
+      setElapsed(`Elapsed: ${m}:${s}`);
+    };
+
+    update();
+    if (isFinished) return;
+
+    const interval = setInterval(update, 1000);
+    return () => clearInterval(interval);
+  }, [startTime, status]);
+
+  return <span>{elapsed}</span>;
+}
+
 export default function ExecutionCard({ execution, index = 0 }) {
   const navigate = useNavigate();
 
+  // Static fallback if needed
   const timeAgo = (dateStr) => {
     const date = new Date(dateStr);
     const now = new Date();
@@ -15,6 +52,8 @@ export default function ExecutionCard({ execution, index = 0 }) {
     if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
     return `${Math.floor(diff / 86400)}d ago`;
   };
+
+  const isFinalStatus = ['pr_created', 'approved', 'merged', 'rejected', 'error'].includes(execution.status);
 
   return (
     <motion.div
@@ -55,9 +94,9 @@ export default function ExecutionCard({ execution, index = 0 }) {
       )}
 
       <div className="flex items-center justify-between pl-12">
-        <div className="flex items-center gap-1.5 text-gray-500">
+        <div className="flex items-center gap-1.5 text-gray-400 font-mono text-xs">
           <Clock className="w-3 h-3" />
-          <span className="text-xs">{timeAgo(execution.createdAt)}</span>
+          <LiveTimer startTime={execution.createdAt} status={execution.status} />
         </div>
 
         {execution.prUrl && (
