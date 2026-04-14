@@ -5,7 +5,7 @@ import ExecutionCard from '../components/ExecutionCard';
 import { Activity, Filter, RefreshCw } from 'lucide-react';
 
 export default function PipelinesListPage() {
-  const { apiFetch } = useAuth();
+  const { apiFetch, token } = useAuth();
   const [executions, setExecutions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
@@ -15,6 +15,42 @@ export default function PipelinesListPage() {
   useEffect(() => {
     loadExecutions();
   }, [page]);
+
+  // Listen to Server-Sent Events (SSE) for real-time updates across the platform
+  useEffect(() => {
+    if (!token) return;
+
+    const sse = new EventSource(`http://localhost:8000/api/executions/stream?token=${token}`);
+
+    sse.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'execution_updated') {
+          // If we are on the first page, fetch silently to update status or insert new executions
+          if (page === 0) {
+            loadExecutionsSilent();
+          }
+        }
+      } catch (err) {
+        console.error('Error parsing SSE data:', err);
+      }
+    };
+
+    return () => sse.close();
+  }, [token, page]);
+
+  const loadExecutionsSilent = async () => {
+    try {
+      const res = await apiFetch(`/api/executions?limit=${limit}&offset=${page * limit}`);
+      if (res.ok) {
+        const data = await res.json();
+        setExecutions(data.executions);
+        setTotal(data.total);
+      }
+    } catch (err) {
+      console.error('Silent load err:', err);
+    }
+  };
 
   const loadExecutions = async () => {
     setLoading(true);

@@ -77,6 +77,48 @@ async function deleteWebhook(token, repoFullName, webhookId) {
 }
 
 /**
+ * Extract error/failure lines from logs with context
+ */
+function extractErrorLogs(fullLogs) {
+  if (typeof fullLogs !== 'string') return '';
+  const lines = fullLogs.split('\n');
+  const errorKeywords = ['error', 'fail', 'exception', 'traceback', 'reject', 'fatal', 'err'];
+
+  let interestingIndices = new Set();
+  const contextSize = 5; // lines before and after an error line
+
+  for (let i = 0; i < lines.length; i++) {
+    const lowerLine = lines[i].toLowerCase();
+    // Typical log format checking
+    if (errorKeywords.some(kw => lowerLine.includes(kw))) {
+      for (let j = Math.max(0, i - contextSize); j <= Math.min(lines.length - 1, i + contextSize); j++) {
+        interestingIndices.add(j);
+      }
+    }
+  }
+
+  // If no clear errors found, fallback to last 100 lines
+  if (interestingIndices.size === 0) {
+    return lines.slice(-100).join('\n');
+  }
+
+  // Sort and reconstruct logs with context blocks
+  const sortedIndices = Array.from(interestingIndices).sort((a, b) => a - b);
+  const result = [];
+
+  let lastIdx = -2;
+  for (const idx of sortedIndices) {
+    if (lastIdx !== -2 && idx > lastIdx + 1) {
+      result.push('... [Logs Skipped] ...');
+    }
+    result.push(lines[idx]);
+    lastIdx = idx;
+  }
+
+  return result.join('\n');
+}
+
+/**
  * Fetch workflow run logs as text
  */
 async function fetchWorkflowLogs(token, repoFullName, runId) {
@@ -107,15 +149,17 @@ async function fetchWorkflowLogs(token, repoFullName, runId) {
               maxRedirects: 5
             }
           );
-          logs += `\n=== Job: ${job.name} ===\n${jobLogs}`;
+
+          const filteredLogs = extractErrorLogs(jobLogs);
+          logs += `\n=== Job: ${job.name} (Errors Extracted) ===\n${filteredLogs}\n`;
         } catch (logErr) {
           logs += `\n=== Job: ${job.name} === (logs unavailable)\n`;
         }
       }
     }
 
-    // Truncate to 5000 chars for AI context limits
-    return logs.substring(0, 5000) || 'No failure logs captured';
+    // Limit the final payload just in case there are too many errors
+    return logs.substring(0, 10000) || 'No failure logs captured';
   } catch (error) {
     console.error('Error fetching workflow logs:', error.message);
     return 'Error fetching logs: ' + error.message;

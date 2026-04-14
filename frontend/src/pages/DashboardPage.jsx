@@ -14,7 +14,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 
 export default function DashboardPage() {
-  const { user, apiFetch } = useAuth();
+  const { user, apiFetch, token } = useAuth();
   const navigate = useNavigate();
   const [stats, setStats] = useState(null);
   const [executions, setExecutions] = useState([]);
@@ -23,6 +23,43 @@ export default function DashboardPage() {
   useEffect(() => {
     loadDashboard();
   }, []);
+
+  // Listen to Server-Sent Events (SSE) for real-time updates across the platform
+  useEffect(() => {
+    if (!token) return;
+
+    const sse = new EventSource(`http://localhost:8000/api/executions/stream?token=${token}`);
+
+    sse.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'execution_updated') {
+          loadDashboardSilent();
+        }
+      } catch (err) {
+        console.error('Error parsing SSE data:', err);
+      }
+    };
+
+    return () => sse.close();
+  }, [token]);
+
+  const loadDashboardSilent = async () => {
+    try {
+      const [statsRes, execRes] = await Promise.all([
+        apiFetch('/api/executions/stats'),
+        apiFetch('/api/executions?limit=5')
+      ]);
+
+      if (statsRes.ok) setStats(await statsRes.json());
+      if (execRes.ok) {
+        const data = await execRes.json();
+        setExecutions(data.executions);
+      }
+    } catch (err) {
+      console.error('Dashboard silent load error:', err);
+    }
+  };
 
   const loadDashboard = async () => {
     try {

@@ -67,6 +67,14 @@ const executionSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  workflowId: {
+    type: Number,
+    default: null
+  },
+  workflowName: {
+    type: String,
+    default: ''
+  },
   workflowRunId: {
     type: Number,
     default: null
@@ -77,6 +85,15 @@ const executionSchema = new mongoose.Schema({
   }
 }, {
   timestamps: true
+});
+const pipelineEvents = require('../utils/events');
+
+executionSchema.post('save', function(doc) {
+  pipelineEvents.emit('execution_updated', {
+    userId: doc.userId,
+    executionId: doc._id,
+    status: doc.status
+  });
 });
 
 module.exports = mongoose.model('Execution', executionSchema);

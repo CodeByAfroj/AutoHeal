@@ -4,7 +4,38 @@ const Execution = require('../models/Execution');
 const User = require('../models/User');
 const { decrypt } = require('../utils/crypto');
 const { getPRDiff } = require('../utils/github');
+const pipelineEvents = require('../utils/events');
 const router = express.Router();
+
+/*
+ * GET /api/executions/stream
+ * Server-Sent Events (SSE) stream for real-time pipeline status updates
+ */
+router.get('/stream', authMiddleware, (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  const userId = req.userId.toString();
+
+  // Send an initial connected message so the client knows it's active
+  res.write(`data: ${JSON.stringify({ type: 'connected' })}\n\n`);
+
+  const handleUpdate = (data) => {
+    // Only send updates for this user's executions
+    if (data.userId.toString() === userId) {
+      res.write(`data: ${JSON.stringify({ type: 'execution_updated', ...data })}\n\n`);
+    }
+  };
+
+  pipelineEvents.on('execution_updated', handleUpdate);
+
+  // Clean up listener when client disconnects
+  req.on('close', () => {
+    pipelineEvents.off('execution_updated', handleUpdate);
+  });
+});
 
 /*
  * GET /api/executions

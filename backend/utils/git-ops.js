@@ -82,11 +82,28 @@ async function getRepoTree(token, repo, branch) {
   return data.tree.filter(t => t.type === 'blob').map(t => t.path);
 }
 
+/**
+ * Delete a branch (ref)
+ */
+async function deleteBranch(token, repo, branchName) {
+  try {
+    const { data } = await axios.delete(
+      `${GITHUB_API}/repos/${repo}/git/refs/heads/${branchName}`,
+      { headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' } }
+    );
+    return data;
+  } catch (e) {
+    if (e.response && e.response.status === 422) return; // Already deleted
+    throw e;
+  }
+}
+
 module.exports = {
   getBaseSha,
   createBranch,
   getFileContent,
   updateFile,
   createPR,
-  getRepoTree
+  getRepoTree,
+  deleteBranch
 };

@@ -10,7 +10,7 @@ import { ArrowLeft, ExternalLink, GitCommit, Clock, Bot, CheckCircle2, XCircle }
 
 export default function PipelinePage() {
   const { id } = useParams();
-  const { apiFetch } = useAuth();
+  const { apiFetch, token } = useAuth();
   const navigate = useNavigate();
 
   const [execution, setExecution] = useState(null);
@@ -49,14 +49,33 @@ export default function PipelinePage() {
     loadExecution();
   }, [loadExecution]);
 
-  // Poll for updates if not in terminal state
+  // Listen to Server-Sent Events (SSE) for real-time updates
   useEffect(() => {
-    if (!execution) return;
-    if (['merged', 'approved', 'rejected', 'error'].includes(execution.status)) return;
+    if (!token) return;
 
-    const interval = setInterval(loadExecution, 5000);
-    return () => clearInterval(interval);
-  }, [execution?.status, loadExecution]);
+    const sse = new EventSource(`http://localhost:8000/api/executions/stream?token=${token}`);
+
+    sse.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'execution_updated' && data.executionId === id) {
+          // Immediately reload to get the fresh data when this specific pipeline updates
+          loadExecution();
+        }
+      } catch (err) {
+        console.error('Error parsing SSE data:', err);
+      }
+    };
+
+    sse.onerror = (err) => {
+      console.error('SSE Connection Error:', err);
+      // EventSource automatically attempts to reconnect
+    };
+
+    return () => {
+      sse.close();
+    };
+  }, [id, token, loadExecution]);
 
   // Load diff when PR is created
   useEffect(() => {

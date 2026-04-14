@@ -6,6 +6,11 @@ const { decrypt } = require('../utils/crypto');
 const { fetchUserRepos, createWebhook, deleteWebhook } = require('../utils/github');
 const router = express.Router();
 
+// Simple in-memory cache to store GitHub repositories
+// Key: userId, Value: { data: repos, timestamp: number }
+const repoCache = new Map();
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
 /*
  * GET /api/repos
  * Fetch user's GitHub repositories
@@ -16,8 +21,17 @@ router.get('/', authMiddleware, async (req, res) => {
     const user = await User.findById(req.userId);
     const token = decrypt(user.accessToken);
 
-    // Fetch repos from GitHub
-    const githubRepos = await fetchUserRepos(token);
+    let githubRepos;
+    const cached = repoCache.get(req.userId);
+
+    // Check if we have valid cached repositories for this user
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+      githubRepos = cached.data;
+    } else {
+      // Fetch repos from GitHub and update cache
+      githubRepos = await fetchUserRepos(token);
+      repoCache.set(req.userId, { data: githubRepos, timestamp: Date.now() });
+    }
 
     // Get enabled repos from our DB
     const enabledRepos = await Repository.find({
