@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Layout from './components/Layout';
+import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
 import AuthCallback from './pages/AuthCallback';
 import DashboardPage from './pages/DashboardPage';
@@ -24,7 +25,7 @@ function ProtectedRoute({ children }) {
   }
 
   if (!user) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/" replace />;
   }
 
   return children;
@@ -36,26 +37,29 @@ function PublicRoute({ children }) {
   if (loading) return null;
 
   if (user) {
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to="/app/dashboard" replace />;
   }
 
   return children;
 }
 
 function AppRoutes() {
+  const { user } = useAuth();
+  
   return (
     <Routes>
       {/* Public */}
+      <Route path="/" element={<HomePage />} />
       <Route path="/login" element={
         <PublicRoute><LoginPage /></PublicRoute>
       } />
       <Route path="/auth/callback" element={<AuthCallback />} />
 
       {/* Protected */}
-      <Route path="/" element={
+      <Route path="/app" element={
         <ProtectedRoute><Layout /></ProtectedRoute>
       }>
-        <Route index element={<Navigate to="/dashboard" replace />} />
+        <Route index element={<Navigate to="/app/dashboard" replace />} />
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="repos" element={<ReposPage />} />
         <Route path="pipelines" element={<PipelinesListPage />} />
@@ -63,8 +67,8 @@ function AppRoutes() {
         <Route path="settings" element={<SettingsPage />} />
       </Route>
 
-      {/* Catch-all */}
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      {/* Catch-all: If logged in, go to dashboard, else home */}
+      <Route path="*" element={<Navigate to={user ? "/app/dashboard" : "/"} replace />} />
     </Routes>
   );
 }

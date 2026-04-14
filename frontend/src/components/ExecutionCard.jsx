@@ -60,7 +60,7 @@ export default function ExecutionCard({ execution, index = 0 }) {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.05 }}
-      onClick={() => navigate(`/pipelines/${execution._id}`)}
+      onClick={() => navigate(`/app/pipelines/${execution._id || execution.id}`)}
       className="glass-card-hover p-5 cursor-pointer group"
     >
       <div className="flex items-start justify-between mb-3">

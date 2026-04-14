@@ -13,10 +13,10 @@ import {
 } from 'lucide-react';
 
 const navItems = [
-  { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { path: '/repos', icon: FolderGit2, label: 'Repositories' },
-  { path: '/pipelines', icon: Activity, label: 'Pipelines' },
-  { path: '/settings', icon: Settings, label: 'Settings' },
+  { path: '/app/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+  { path: '/app/repos', icon: FolderGit2, label: 'Repositories' },
+  { path: '/app/pipelines', icon: Activity, label: 'Pipelines' },
+  { path: '/app/settings', icon: Settings, label: 'Settings' },
 ];
 
 export default function Sidebar({ collapsed, onToggle }) {

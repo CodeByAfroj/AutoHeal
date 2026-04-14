@@ -156,7 +156,7 @@ export default function DashboardPage() {
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ delay: 0.4 }}
-          onClick={() => navigate('/repos')}
+          onClick={() => navigate('/app/repos')}
           className="glass-card-hover p-5 text-left group"
         >
           <div className="flex items-center justify-between">
@@ -177,7 +177,7 @@ export default function DashboardPage() {
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ delay: 0.5 }}
-          onClick={() => navigate('/pipelines')}
+          onClick={() => navigate('/app/pipelines')}
           className="glass-card-hover p-5 text-left group"
         >
           <div className="flex items-center justify-between">
@@ -205,7 +205,7 @@ export default function DashboardPage() {
           <h2 className="text-lg font-bold text-white">Recent Pipelines</h2>
           {executions.length > 0 && (
             <button
-              onClick={() => navigate('/pipelines')}
+              onClick={() => navigate('/app/pipelines')}
               className="text-xs text-heal-cyan hover:text-heal-cyan/80 transition-colors"
             >
               View all →
@@ -232,7 +232,7 @@ export default function DashboardPage() {
             <p className="text-xs text-gray-500 mb-4">
               Enable self-healing on a repository to get started
             </p>
-            <button onClick={() => navigate('/repos')} className="btn-primary text-sm">
+            <button onClick={() => navigate('/app/repos')} className="btn-primary text-sm">
               Enable a Repository
             </button>
           </div>

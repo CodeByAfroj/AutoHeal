@@ -11,7 +11,7 @@ export default function AuthCallback() {
     const token = searchParams.get('token');
     if (token) {
       login(token);
-      navigate('/dashboard', { replace: true });
+      navigate('/app/dashboard', { replace: true });
     } else {
       navigate('/login?error=no_token', { replace: true });
     }
