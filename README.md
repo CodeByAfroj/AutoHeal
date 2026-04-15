@@ -15,210 +15,190 @@ AutoHeal 2.0 is a full-stack SaaS platform that **automatically detects CI/CD fa
   <img src="frontend/public/repo.png" width="48%" alt="Repository Management">
   <img src="frontend/public/pipeline.png" width="48%" alt="Pipeline Flow">
   <br>
-  <b>Seamless Control</b>: Manage repository connections and monitor live healing pipelines in real-time.
-</p>
-
-<p align="center">
-  <img src="frontend/public/running_pipeline.png" width="100%" alt="Running Pipeline">
-  <br>
-  <b>Live RCA</b>: Detailed AI-driven root cause analysis and fix generation in action.
+  <b>Seamless Control</b>: Manage repository connections and monitor live healing pipelines in real-time via Server-Sent Events (SSE).
 </p>
 
 ---
 
-## 🚀 How It Works
+## 🏗️ Architecture & Logic Flow
 
+AutoHeal 2.0 operates on a weightless, event-driven architecture designed for extreme scalability and cost-efficiency.
+
+```mermaid
+graph TD
+    subgraph "GitHub Ecosystem"
+        GH_Repo[("Target Repository")]
+        GH_Actions["GitHub Actions (CI)"]
+        GH_Webhooks["GitHub Webhooks"]
+    end
+
+    subgraph "AutoHeal 2.0 (Backend)"
+        API_Gateway["Express API Server"]
+        Webhook_Handler["Webhook Handler & Mutex"]
+        Ingestor["Background Ingestion Engine"]
+        
+        subgraph "AI Core"
+            RAG["RAG Retrieval (Atlas)"]
+            AST["AST Parser (Tree-sitter)"]
+            RCA["AI Root Cause Analysis"]
+            Fixer["AI Selective Patching"]
+        end
+        
+        Git_Ops["Git Operations Hub"]
+    end
+
+    subgraph "Data & AI Layer"
+        MongoDB[("MongoDB Atlas + Vector Search")]
+        Groq["Groq (Llama 3.3 70B)"]
+        Gemini["Google Gemini (Fallback)"]
+        Xenova["Local Embeddings (WASM)"]
+    end
+
+    subgraph "Frontend"
+        Dashboard["React Dashboard (SSE Updates)"]
+    end
+
+    GH_Repo -- "Push/Failure" --> GH_Actions
+    GH_Actions -- "Event: workflow_run" --> GH_Webhooks
+    GH_Webhooks -- "Secured Payload" --> Webhook_Handler
+    Webhook_Handler -- "Retrieve Context" --> RAG
+    RAG -- "Vector Search" --> MongoDB
+    Webhook_Handler -- "Run RCA" --> RCA
+    RCA -- "Request Files" --> Git_Ops
+    Git_Ops -- "Fetch Source" --> GH_Repo
+    RCA -- "Strategy" --> Fixer
+    Fixer -- "Generate JSON Patch" --> Groq
+    Groq -- "Fallback" --> Gemini
+    Fixer -- "Patch in Memory" --> Git_Ops
+    Git_Ops -- "Shadow Push" --> GH_Repo
+    GH_Repo -- "CI Result" --> Webhook_Handler
+    Webhook_Handler -- "Success" --> Dashboard
+    Webhook_Handler -- "Failure" --> RCA
 ```
-Push Code → CI Fails → GitHub Webhook → AutoHeal Backend
-                                              ↓
-                                    Fetch Failure Logs
-                                              ↓
-                                    AI Root Cause Analysis (Groq/Gemini)
-                                              ↓
-                                    AI Code Fix Generation
-                                              ↓
-                                    Create Branch → Commit Fix → Open PR
-                                              ↓
-                                    User Approves/Rejects from Dashboard
-```
 
-## ✨ Features
+### 1. 👻 Shadow Branching (The Zero-Infra Testing)
+Instead of running heavy CI tests locally, AutoHeal offloads **100% of the testing compute infrastructure to GitHub**.
+- After generating a fix, the backend pushes code to a hidden, temporary branch (`fix/autoheal-...`).
+- GitHub Actions runs the user's native CI suite on this branch.
+- AutoHeal intercepts the result via webhooks. If it passes, only then is a PR opened. This ensures developers *never* see a failing AI PR.
 
-- **🔐 GitHub OAuth Login** — Secure authentication with encrypted tokens
-- **📦 Repository Management** — Enable/disable self-healing per repo
-- **🔔 Webhook Integration** — Automatic CI failure detection via GitHub webhooks
-- **🧠 Semantic Vector Search (RAG)** — 100% offline, local codebase mapping using Hugging Face's `all-MiniLM-L6-v2` via Xenova (Zero API limits)
-- **🤖 AI-Powered RCA** — Root cause analysis using Groq (llama-3.3-70b) with Smart Fallbacks
-- **🔧 Autonomous Fix Generation** — Generates and natively patches code inside memory without full-file rewrites
-- **📤 Automated PR Creation** — Creates branch, commits fix, opens PR on GitHub
-- **👻 Shadow Branching** — Offloads 100% of pipeline validation testing to GitHub Actions
-- **♻️ Smart Retry Loops** — Intelligently loops fix-attempts automatically if test validations fail
-- **✅ Approve/Reject Flow** — Merge or close AI-generated PRs from the dashboard
-- **📊 Real-Time Dashboard** — Live pipeline status, stats, and execution history
+### 2. 🧠 Local RAG & AST Chunking
+To scale to massive codebases without hitting AI token limits, AutoHeal utilizes **Retrieval-Augmented Generation**:
+- **Background Ingestion:** When a repo is enabled, a non-blocking worker clones it, parses it via `web-tree-sitter` (AST), and extracts individual functions.
+- **Local Embeddings:** Code chunks are converted into vectors locally using **Xenova Transformers (all-MiniLM-L6-v2)** running in WASM—zero API cost.
+- **Vector Search:** During a crash, AutoHeal performs a `$vectorSearch` in MongoDB Atlas to surgically find the exact function responsible for the error.
 
-## 🏗️ Architecture
+### 3. ♻️ Smart Retry Loops
+If an AI-generated fix fails validation on the Shadow Branch, the system doesn't give up. It extracts the *new* error logs, feeds the previous attempt back into the AI as a "failed lesson," and triggers a recursive healing cycle until the code passes all tests.
 
-```
-┌─────────────────────────────────────────────────────┐
-│                    Frontend (React)                  │
-│     Login │ Dashboard │ Repos │ Pipelines │ Settings │
-└────────────────────────┬────────────────────────────┘
-                         │ JWT Auth
-┌────────────────────────┴────────────────────────────┐
-│                  Backend (Node.js/Express)            │
-│                                                      │
-│  Auth Routes ──── Repo Routes ──── Webhook Handler   │
-│       │               │                │             │
-│       │               │          ┌─────┴──────┐     │
-│       │               │          │  AI Fixer   │     │
-│       │               │          │ (Groq API)  │     │
-│       │               │          └─────┬──────┘     │
-│       │               │                │             │
-│       │               │          ┌─────┴──────┐     │
-│       │               │          │  Git Ops    │     │
-│       │               │          │ (GitHub API)│     │
-│       │               │          └────────────┘     │
-│       ▼               ▼                              │
-│            MongoDB Atlas (Encrypted Storage)         │
-└──────────────────────────────────────────────────────┘
-```
+---
+
+## ✨ Key Features
+
+- **🔐 Enterprise Security** — GitHub tokens encrypted with AES-256-GCM; HMAC-signed webhooks.
+- **🤖 Multi-Model Fallback** — Primary RCA on Groq (Llama 3.3 70B) with instant cascade to Google Gemini 2.0 Flash if rate limits are hit.
+- **⚡ Real-Time SSE** — Live pipeline status updates pushed to the frontend via Server-Sent Events—no polling needed.
+- **🛠️ JSON Selective Patching** — AI outputs search/replace blocks instead of full files, slashing token consumption by 90% and preventing indentation errors.
+- **🚫 Infinite Loop Protection** — Built-in circuit breakers limit executions per repository to prevent runaway CI costs.
+
+---
 
 ## 📋 Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | React 19, Vite 8, Tailwind CSS, Framer Motion, Lucide React |
-| Backend | Node.js, Express, Passport.js, JWT, Mongoose |
-| Database | MongoDB Atlas (Standard + `$vectorSearch` indexes) |
-| Core AI | Groq (llama-3.3-70b-versatile) |
-| Offline Embeddings | Xenova Transformers WebAssembly (`all-MiniLM-L6-v2`), `web-tree-sitter` (AST) |
-| Security | AES-256-GCM encryption, HMAC webhook verification |
-| Tunnel | ngrok (for local development) |
+| **Frontend** | React 19, Vite 6, Framer Motion, Tailwind CSS, Lucide React |
+| **Backend** | Node.js, Express, Passport.js (GitHub OAuth), JWT |
+| **Database** | MongoDB Atlas (Vector Search + Aggregation Pipelines) |
+| **AI (RCA/Fix)** | Groq (Llama-3.3-70b-versatile), Google Gemini 2.0 Flash |
+| **AI (Embeddings)** | Xenova Transformers (WASM), `all-MiniLM-L6-v2` |
+| **Parsing** | `web-tree-sitter` (Abstract Syntax Tree analysis) |
+| **Real-time** | Server-Sent Events (SSE) |
+
+---
 
 ## 🛠️ Setup
 
 ### Prerequisites
 
 - Node.js 18+
-- MongoDB Atlas account
+- MongoDB Atlas account (with a Vector Search Index named `vector_index`)
 - GitHub OAuth App
-- Groq API key (free at [console.groq.com](https://console.groq.com))
-- ngrok (for webhook delivery in dev)
+- Groq API key & Gemini API key
+- ngrok (for local webhook delivery)
 
-### 1. Clone & Install
+### 1. Installation
 
 ```bash
 git clone https://github.com/CodeByAfroj/AutoHeal.git
 cd AutoHeal
 
-# Backend
+# Install Backend
 cd backend && npm install
 
-# Frontend
+# Install Frontend
 cd ../frontend && npm install
 ```
 
-### 2. Configure Environment
+### 2. Environment Configuration
 
 Create `backend/.env`:
 
 ```env
-# GitHub OAuth App (https://github.com/settings/developers)
-# Callback URL: http://localhost:8000/auth/github/callback
-GITHUB_CLIENT_ID=your_client_id
-GITHUB_CLIENT_SECRET=your_client_secret
-
-# MongoDB Atlas (Ensure you have a Search Index setup for Vectors!)
-MONGODB_URI=mongodb+srv://user:pass@cluster.mongodb.net/autoheal
-
-# JWT Secret (any random string)
-JWT_SECRET=your_random_jwt_secret_here
-
-# Encryption Key (64 hex chars = 32 bytes for AES-256)
-ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
-
-# Groq API Key (free at https://console.groq.com/keys)
-GROQ_API_KEY=gsk_your_groq_key
-
-# Gemini API Key (No longer strictly required!)
-GEMINI_API_KEY=
-
-# ngrok URL (update after starting ngrok)
-NGROK_URL=https://your-tunnel.ngrok-free.app
-
-# Webhook Secret
-WEBHOOK_SECRET=your_webhook_secret
-
-# Frontend
+GITHUB_CLIENT_ID=your_id
+GITHUB_CLIENT_SECRET=your_secret
+MONGODB_URI=your_atlas_uri
+JWT_SECRET=your_secret
+ENCRYPTION_KEY=64_hex_chars
+GROQ_API_KEY=gsk_...
+GEMINI_API_KEY=AIza...
+NGROK_URL=https://...
+WEBHOOK_SECRET=your_secret
 FRONTEND_URL=http://localhost:5173
 PORT=8000
 ```
 
-### 3. Start Services
-
-```bash
-# Terminal 1: ngrok tunnel
-ngrok http 8000
-
-# Terminal 2: Backend
-cd backend && npm run dev
-
-# Terminal 3: Frontend
-cd frontend && npm run dev
+### 3. Vector Index Setup
+In MongoDB Atlas, create a Search Index on the `codechunks` collection:
+```json
+{
+  "fields": [
+    {
+      "numDimensions": 384,
+      "path": "embedding",
+      "similarity": "cosine",
+      "type": "vector"
+    }
+  ]
+}
 ```
 
-### 4. Enable Self-Healing
-
-1. Open `http://localhost:5173` → Sign in with GitHub
-2. Go to **Repositories** → Enable a repo
-3. Push buggy code → CI fails → AutoHeal creates a fix PR automatically!
+---
 
 ## 📁 Project Structure
 
 ```
 AutoHeal/
 ├── backend/
-│   ├── config/
-│   │   ├── db.js              # MongoDB connection
-│   │   └── passport.js        # GitHub OAuth strategy
-│   ├── middleware/
-│   │   └── auth.js            # JWT authentication
-│   ├── models/
-│   │   ├── Execution.js       # Pipeline execution records
-│   │   ├── Repository.js      # Enabled repositories
-│   │   └── User.js            # User profiles
 │   ├── routes/
-│   │   ├── approval.js        # PR approve/reject
-│   │   ├── auth.js            # GitHub OAuth flow
-│   │   ├── executions.js      # Pipeline history & status
-│   │   ├── repos.js           # Repository management
-│   │   └── webhook.js         # CI failure webhook handler
+│   │   ├── webhook.js         # Core Event Logic & Shadow Branching
+│   │   ├── repos.js           # Repo Mgmt & Auto-Webhook Creation
+│   │   └── executions.js      # SSE status streaming
 │   ├── utils/
-│   │   ├── ai-fixer.js        # AI RCA + fix pipeline (Groq/Gemini)
-│   │   ├── crypto.js          # AES-256-GCM encryption
-│   │   ├── git-ops.js         # GitHub branch/commit/PR operations
-│   │   └── github.js          # GitHub API helpers
-│   └── server.js              # Express app entry point
+│   │   ├── ai-fixer.js        # RCA & Selective Patching logic
+│   │   ├── rag.js             # Local Embedding & Vector Search
+│   │   ├── ingestor.js        # Background Ingestion Worker
+│   │   ├── ast.js             # Tree-sitter Code Chunking
+│   │   └── events.js          # Server-Sent Events (SSE) manager
+│   └── server.js              # Entry Point
 ├── frontend/
-│   ├── src/
-│   │   ├── components/        # Reusable UI components
-│   │   ├── contexts/          # Auth context provider
-│   │   └── pages/             # Dashboard, Repos, Pipelines, etc.
-│   └── index.html
+│   └── src/
+│       ├── pages/             # Dashboard, Pipelines (Real-time monitoring)
+│       └── components/        # High-Fidelity UI components
 └── README.md
 ```
 
-## 🔒 Security
-
-- **Token Encryption**: GitHub access tokens encrypted with AES-256-GCM
-- **Webhook Verification**: HMAC-SHA256 signature validation
-- **JWT Sessions**: Stateless auth with 7-day expiry
-- **No secrets in code**: All credentials via environment variables
-
-## 📄 License
-
-MIT
-
 ---
 
-Built with ❤️ by Team CodeFlux
+made with ❤️ by Team CodeImpact
+
