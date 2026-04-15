@@ -147,28 +147,30 @@ Create `backend/.env`:
 ```env
 GITHUB_CLIENT_ID=your_id
 GITHUB_CLIENT_SECRET=your_secret
+# AI Providers
+GROQ_API_KEY=your_key
+GEMINI_API_KEY=your_key
+
+# Database
 MONGODB_URI=your_atlas_uri
-JWT_SECRET=your_secret
-ENCRYPTION_KEY=64_hex_chars
-GROQ_API_KEY=gsk_...
-GEMINI_API_KEY=AIza...
-NGROK_URL=https://...
-WEBHOOK_SECRET=your_secret
-FRONTEND_URL=http://localhost:5173
-PORT=8000
+
+# GitHub App Integration
+GITHUB_CLIENT_ID=...
+GITHUB_CLIENT_SECRET=...
+WEBHOOK_SECRET=...
+
+# Security
+JWT_SECRET=...
+ENCRYPTION_KEY=... (32-character string for AES-256)
 ```
 
-### 3. Vector Index Setup
-In MongoDB Atlas, create a Search Index on the `codechunks` collection:
+### 2. Global Vector Index
+Create a Search Index named `vector_index` on the `codechunks` collection:
 ```json
 {
   "fields": [
-    {
-      "numDimensions": 384,
-      "path": "embedding",
-      "similarity": "cosine",
-      "type": "vector"
-    }
+    { "numDimensions": 384, "path": "embedding", "similarity": "cosine", "type": "vector" },
+    { "path": "repositoryId", "type": "filter" }
   ]
 }
 ```

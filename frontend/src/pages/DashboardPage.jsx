@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
+import { useAutoQuery } from '../hooks/useAutoQuery';
 import ExecutionCard from '../components/ExecutionCard';
 import {
   Activity,
@@ -14,17 +15,27 @@ import {
 import { useNavigate } from 'react-router-dom';
 
 export default function DashboardPage() {
-  const { user, apiFetch, token } = useAuth();
+  const { user, token } = useAuth();
   const navigate = useNavigate();
-  const [stats, setStats] = useState(null);
-  const [executions, setExecutions] = useState([]);
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    loadDashboard();
-  }, []);
+  // 🚀 Persistent Caching for Dashboard Stats
+  const { 
+    data: stats, 
+    loading: statsLoading, 
+    refetch: refetchStats 
+  } = useAutoQuery('dashboard_stats', '/api/executions/stats');
 
-  // Listen to Server-Sent Events (SSE) for real-time updates across the platform
+  // 🚀 Persistent Caching for Recent Pipelines
+  const { 
+    data: execData, 
+    loading: execLoading, 
+    refetch: refetchExecs 
+  } = useAutoQuery('recent_pipelines', '/api/executions?limit=5');
+
+  const executions = execData?.executions || [];
+  const loading = statsLoading && execLoading;
+
+  // Listen to Server-Sent Events (SSE) for real-time updates
   useEffect(() => {
     if (!token) return;
 
@@ -32,9 +43,11 @@ export default function DashboardPage() {
 
     sse.onmessage = (event) => {
       try {
-        const data = JSON.parse(event.data);
-        if (data.type === 'execution_updated') {
-          loadDashboardSilent();
+        const payload = JSON.parse(event.data);
+        if (payload.type === 'execution_updated') {
+          // Silent refresh of both datasets
+          refetchStats(true);
+          refetchExecs(true);
         }
       } catch (err) {
         console.error('Error parsing SSE data:', err);
@@ -42,43 +55,7 @@ export default function DashboardPage() {
     };
 
     return () => sse.close();
-  }, [token]);
-
-  const loadDashboardSilent = async () => {
-    try {
-      const [statsRes, execRes] = await Promise.all([
-        apiFetch('/api/executions/stats'),
-        apiFetch('/api/executions?limit=5')
-      ]);
-
-      if (statsRes.ok) setStats(await statsRes.json());
-      if (execRes.ok) {
-        const data = await execRes.json();
-        setExecutions(data.executions);
-      }
-    } catch (err) {
-      console.error('Dashboard silent load error:', err);
-    }
-  };
-
-  const loadDashboard = async () => {
-    try {
-      const [statsRes, execRes] = await Promise.all([
-        apiFetch('/api/executions/stats'),
-        apiFetch('/api/executions?limit=5')
-      ]);
-
-      if (statsRes.ok) setStats(await statsRes.json());
-      if (execRes.ok) {
-        const data = await execRes.json();
-        setExecutions(data.executions);
-      }
-    } catch (err) {
-      console.error('Dashboard load error:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [token, refetchStats, refetchExecs]);
 
   const statCards = stats ? [
     {

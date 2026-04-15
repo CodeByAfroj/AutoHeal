@@ -10,9 +10,10 @@ const passport = require('./config/passport');
 // Route imports
 const authRoutes = require('./routes/auth');
 const repoRoutes = require('./routes/repos');
-const webhookRoutes = require('./routes/webhook');
+const webhookRoutes = require('./routes/webhook').router; 
 const executionRoutes = require('./routes/executions');
 const approvalRoutes = require('./routes/approval');
+const { runWatchdog } = require('./utils/watchdog');
 
 const app = express();
 const PORT = process.env.PORT || 8000;
@@ -35,6 +36,10 @@ connectDB().then(async () => {
   } catch (err) {
     console.warn('Failed to run orphan sweep:', err.message);
   }
+
+  // 🐕 Launch the Periodic Watchdog (Every 5 minutes)
+  runWatchdog(); // Run once on boot
+  setInterval(runWatchdog, 1000 * 60 * 5); 
 });
 
 // ============================================

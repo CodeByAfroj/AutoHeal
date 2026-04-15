@@ -178,4 +178,33 @@ router.get('/:id/diff', authMiddleware, async (req, res) => {
   }
 });
 
+/**
+ * DELETE /api/executions/:id
+ * Manually remove a stuck or irrelevant execution from the dashboard.
+ */
+router.delete('/:id', authMiddleware, async (req, res) => {
+  try {
+    const deleted = await Execution.findOneAndDelete({
+      _id: req.params.id,
+      userId: req.userId
+    });
+
+    if (!deleted) {
+      return res.status(404).json({ error: 'Execution not found' });
+    }
+
+    // 📣 Notify all clients via SSE to refresh their lists
+    pipelineEvents.emit('execution_updated', {
+      userId: req.userId,
+      executionId: req.params.id,
+      action: 'deleted'
+    });
+
+    res.json({ success: true, message: 'Execution removed.' });
+  } catch (error) {
+    console.error('Error deleting execution:', error.message);
+    res.status(500).json({ error: 'Failed to delete execution' });
+  }
+});
+
 module.exports = router;

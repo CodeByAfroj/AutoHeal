@@ -1,22 +1,29 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
+import { useAutoQuery } from '../hooks/useAutoQuery';
 import ExecutionCard from '../components/ExecutionCard';
 import { Activity, Filter, RefreshCw } from 'lucide-react';
 
 export default function PipelinesListPage() {
-  const { apiFetch, token } = useAuth();
-  const [executions, setExecutions] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [total, setTotal] = useState(0);
+  const { token } = useAuth();
   const [page, setPage] = useState(0);
   const limit = 20;
 
-  useEffect(() => {
-    loadExecutions();
-  }, [page]);
+  // Utilize the new Persistence Hook for instant-load UI
+  const { 
+    data, 
+    loading, 
+    refetch 
+  } = useAutoQuery(
+    `pipelines_p${page}`, 
+    `/api/executions?limit=${limit}&offset=${page * limit}`
+  );
 
-  // Listen to Server-Sent Events (SSE) for real-time updates across the platform
+  const executions = data?.executions || [];
+  const total = data?.total || 0;
+
+  // Listen to Server-Sent Events (SSE) for real-time updates
   useEffect(() => {
     if (!token) return;
 
@@ -24,12 +31,10 @@ export default function PipelinesListPage() {
 
     sse.onmessage = (event) => {
       try {
-        const data = JSON.parse(event.data);
-        if (data.type === 'execution_updated') {
-          // If we are on the first page, fetch silently to update status or insert new executions
-          if (page === 0) {
-            loadExecutionsSilent();
-          }
+        const payload = JSON.parse(event.data);
+        if (payload.type === 'execution_updated') {
+          // Silent background refetch ensures the cache is updated without a loading spinner
+          refetch(true);
         }
       } catch (err) {
         console.error('Error parsing SSE data:', err);
@@ -37,36 +42,7 @@ export default function PipelinesListPage() {
     };
 
     return () => sse.close();
-  }, [token, page]);
-
-  const loadExecutionsSilent = async () => {
-    try {
-      const res = await apiFetch(`/api/executions?limit=${limit}&offset=${page * limit}`);
-      if (res.ok) {
-        const data = await res.json();
-        setExecutions(data.executions);
-        setTotal(data.total);
-      }
-    } catch (err) {
-      console.error('Silent load err:', err);
-    }
-  };
-
-  const loadExecutions = async () => {
-    setLoading(true);
-    try {
-      const res = await apiFetch(`/api/executions?limit=${limit}&offset=${page * limit}`);
-      if (res.ok) {
-        const data = await res.json();
-        setExecutions(data.executions);
-        setTotal(data.total);
-      }
-    } catch (err) {
-      console.error('Load error:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [token, refetch]);
 
   return (
     <div>
@@ -83,7 +59,7 @@ export default function PipelinesListPage() {
         </div>
 
         <button
-          onClick={loadExecutions}
+          onClick={() => refetch()}
           disabled={loading}
           className="btn-secondary flex items-center gap-2"
         >

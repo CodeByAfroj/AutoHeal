@@ -1,35 +1,25 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
+import { useAutoQuery } from '../hooks/useAutoQuery';
 import RepoCard from '../components/RepoCard';
 import { Search, FolderGit2, Loader2, RefreshCw } from 'lucide-react';
 
 export default function ReposPage() {
   const { apiFetch } = useAuth();
-  const [repos, setRepos] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(null);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all'); // all, enabled, disabled
 
-  useEffect(() => {
-    loadRepos();
-  }, []);
+  // 🚀 Persistent Caching for Repositories
+  const { 
+    data: reposData, 
+    loading, 
+    refetch: loadRepos,
+    setData: setRepos 
+  } = useAutoQuery('user_repositories', '/api/repos');
 
-  const loadRepos = async () => {
-    setLoading(true);
-    try {
-      const res = await apiFetch('/api/repos');
-      if (res.ok) {
-        const data = await res.json();
-        setRepos(data);
-      }
-    } catch (err) {
-      console.error('Failed to load repos:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const repos = reposData || [];
 
   const enableRepo = async (repo) => {
     setActionLoading(repo.id);

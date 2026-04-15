@@ -5,9 +5,12 @@ const AuthContext = createContext(null);
 const API_URL = 'http://localhost:8000';
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(() => {
+    const cached = localStorage.getItem('autoheal_user');
+    return cached ? JSON.parse(cached) : null;
+  });
   const [token, setToken] = useState(localStorage.getItem('autoheal_token'));
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!user);
 
   useEffect(() => {
     if (token) {
@@ -25,8 +28,8 @@ export function AuthProvider({ children }) {
       if (res.ok) {
         const data = await res.json();
         setUser(data);
+        localStorage.setItem('autoheal_user', JSON.stringify(data));
       } else {
-        // Token invalid
         logout();
       }
     } catch (err) {
@@ -43,6 +46,11 @@ export function AuthProvider({ children }) {
 
   const logout = () => {
     localStorage.removeItem('autoheal_token');
+    localStorage.removeItem('autoheal_user');
+    // Clear all persistent caches on logout for security
+    Object.keys(localStorage).forEach(k => {
+      if (k.startsWith('ah_cache_')) localStorage.removeItem(k);
+    });
     setToken(null);
     setUser(null);
   };

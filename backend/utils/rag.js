@@ -41,11 +41,9 @@ async function findRelevantCodeChunks(errorLog, repositoryId, limit = 3) {
         path: "embedding",
         queryVector: queryEmbedding,
         numCandidates: 100,
-        limit: limit
+        limit: limit,
+        filter: { repositoryId: { $eq: repositoryId } }
       }
-    },
-    { 
-      $match: { repositoryId: repositoryId } 
     }
   ]);
 }

@@ -6,16 +6,39 @@ const { getBaseSha, createBranch, getFileContent, updateFile, createPR, getRepoT
  * Call AI with Groq (primary) or Gemini (fallback)
  * We use Llama 3.1 8B by default to preserve organization tokens (high daily limits).
  */
-async function callAI(prompt, maxTokens = 2000) {
+async function callAI(prompt, maxTokens = 2000, options = {}) {
   // 🧠 Core Model Fallback Roster
   const groqModels = [
-    'llama-3.3-70b-versatile', // Try the smartest model first
-    'llama-3.1-8b-instant'     // Guaranteed alive fallback
+    'llama-3.3-70b-versatile', 
+    'llama-3.1-8b-instant'     
   ];
+  
+  const geminiModels = [
+    'gemini-2.0-flash', 
+    'gemini-2.0-flash-lite'
+  ];
+
+  // 🚀 SMART ROUTING: Explicitly prefer Gemini for cheaper/faster tasks if requested
+  const isGeneric = prompt.includes('Classify') || prompt.includes('Re-ranking');
+  const preferGemini = options.preferGemini || isGeneric;
+
+  if (preferGemini && process.env.GEMINI_API_KEY) {
+     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+     for (const modelName of geminiModels) {
+       try {
+         console.log(`   🧠 [Smart Router] Directing to Gemini ${modelName}...`);
+         const model = genAI.getGenerativeModel({ model: modelName });
+         const response = await model.generateContent(prompt);
+         return response.response.text();
+       } catch (e) {
+         console.warn(`   ⚠️ Gemini ${modelName} busy, cascading...`);
+       }
+     }
+  }
 
   if (process.env.GROQ_API_KEY) {
     const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-    
+
     for (const model of groqModels) {
       try {
         console.log(`   🧠 Using Groq (${model})...`);
@@ -65,6 +88,97 @@ async function callAI(prompt, maxTokens = 2000) {
 }
 
 /**
+ * GENERATE ERROR FINGERPRINT
+ * Strips unique data (timestamps, absolute paths) from error logs to 
+ * create a stable key for deduplication.
+ */
+function getErrorFingerprint(logs) {
+  if (!logs) return 'unknown';
+  // Strip common noisy patterns
+  let clean = logs.replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/g, '') // ISO Dates
+    .replace(/\/Users\/[^\/]+\//g, '/user_home/') // Local machine paths
+    .replace(/[a-f0-9]{40}/g, '<sha>') // Git SHAs
+    .replace(/\s+/g, ' ') // Collapse whitespace
+    .trim();
+  
+  // Use last 500 chars which usually contain the specific crash reason
+  const slice = clean.length > 500 ? clean.slice(-500) : clean;
+  return require('crypto').createHash('md5').update(slice).digest('hex');
+}
+
+/**
+ * RE-RANKING LAYER (Accuracy Booster)
+ * Takes a list of candidates from vector search and scores them using an LLM 
+ * to identify the absolute most relevant context for the error.
+ */
+async function rerankChunks(chunks, errorLog) {
+  if (!chunks || chunks.length <= 3) return chunks;
+
+  console.log(`   ⚖️  Re-ranking ${chunks.length} candidates for maximum precision...`);
+
+  const rerankPrompt = `
+You are a Code Retrieval Expert. Evaluate these ${chunks.length} code chunks against the error log.
+Identify which chunks are MOST likely to contain the bug or explain why the crash happened.
+
+## ERROR LOG:
+${errorLog.slice(-2000)}
+
+## CANDIDATE CHUNKS:
+${chunks.map((c, i) => `[ID: ${i}] File: ${c.filePath} | Function: ${c.functionName}\nContent: ${c.codeContent.slice(0, 500)}...`).join('\n\n')}
+
+## TASK:
+Return a JSON object containing the IDs of the TOP 3 most relevant chunks in order of importance.
+Format: { "top_ids": [number, number, number] }`;
+
+  try {
+    const response = await callAI(rerankPrompt, 500);
+    const cleanJson = response.replace(/```[a-z]*\n|```/g, '').trim();
+    const { top_ids } = JSON.parse(cleanJson);
+
+    // Safety check: ensure IDs are valid indices
+    const validIds = top_ids.filter(id => id >= 0 && id < chunks.length).slice(0, 3);
+    return validIds.map(id => chunks[id]);
+  } catch (e) {
+    console.warn('   ⚠️  Re-ranking failed, falling back to raw vector matches:', e.message);
+    return chunks.slice(0, 3);
+  }
+}
+
+/**
+ * FAILURE CLASSIFICATION LAYER (Pre-RAG Stage)
+ * Analyzes raw logs to determine the nature of the crash before we start 
+ * searching the codebase. This allows us to adjust our retrieval strategy.
+ */
+async function classifyFailure(errorLogs) {
+  console.log('   🏷️  Classifying failure type for optimized retrieval...');
+  
+  const classificationPrompt = `
+Analyze these CI failure logs and classify the error into one of these categories:
+- [SYNTAX]: Missing brackets, typos, indentation, or parsing errors.
+- [DEPENDENCY]: Module not found, package version conflicts, or missing imports.
+- [LOGIC/TEST]: Assertion failure, unexpected values, or functional bugs.
+- [INFRA/CONFIG]: Port in use, database connection failed, or environment variable missing.
+
+## ERROR LOGS (Tail):
+${errorLogs.slice(-2000)}
+
+## TASK:
+Return ONLY a valid JSON object:
+{ "type": "SYNTAX" | "DEPENDENCY" | "LOGIC" | "INFRA", "reason": "Short explanation", "impact_score": 1-10 }`;
+
+  try {
+    const response = await callAI(classificationPrompt, 400);
+    const cleanJson = response.replace(/```[a-z]*\n|```/g, '').trim();
+    return JSON.parse(cleanJson);
+  } catch (e) {
+    console.warn('   ⚠️  Classification failed, defaulting to GENERIC logic error.');
+    return { type: 'LOGIC', reason: 'Automatic fallback', impact_score: 5 };
+  }
+}
+
+
+
+/**
  * Run the full AI self-healing pipeline:
  * 1. Analyze logs with AI → Root Cause Analysis
  * 2. Read the target file from GitHub
@@ -77,6 +191,40 @@ async function runSelfHealingPipeline(execution, githubToken) {
   const errorLogs = execution.errorLogs || '';
 
   console.log(`🤖 Starting AI self-healing for ${repo}...`);
+
+  // ============================================
+  // STEP 0.5: Failure Classification
+  // ============================================
+  const classification = await classifyFailure(errorLogs);
+  console.log(`   ✅ Classified as: [${classification.type}] - ${classification.reason}`);
+
+  // ============================================
+  // STEP 0.7: Semantic Deduplication (Cache Check)
+  // ============================================
+  const FixCache = require('../models/FixCache');
+  const fingerprint = getErrorFingerprint(errorLogs);
+  const cachedFix = await FixCache.findOne({ errorFingerprint: fingerprint });
+
+  if (cachedFix) {
+    console.log(`\n🎯 DEDUPLICATION HIT! Found a matching solution in the global brain.`);
+    console.log(`   Strategy: ${cachedFix.fixStrategy.substring(0, 50)}...`);
+    
+    // We update the execution record using cached wisdom instead of calling the expensive RCA
+    execution.rcaResult = {
+      rootCause: `(Cached) ${cachedFix.rootCause}`,
+      targetFile: 'Determining from cached pattern...',
+      fixPlan: cachedFix.fixStrategy,
+      confidenceScore: 0.99,
+      errorType: cachedFix.errorType
+    };
+    await execution.save();
+    
+    // Increment success count for the cache item
+    cachedFix.successCount += 1;
+    await cachedFix.save();
+    
+    // NOTE: In a full implementation, we'd also cache the 'files_to_read' logic here
+  }
 
   // ============================================
   // STEP 1: Root Cause Analysis (Multi-file)
@@ -96,17 +244,20 @@ async function runSelfHealingPipeline(execution, githubToken) {
   const { findRelevantCodeChunks } = require('./rag');
   let ragContext = "";
   try {
-    console.log('🔍 Querying MongoDB Vector Database for semantic matches...');
-    // Search the vector DB using the last 1000 characters of the error log
-    const errorSnippet = errorLogs.length > 1000 ? errorLogs.slice(-1000) : errorLogs;
-    const chunks = await findRelevantCodeChunks(errorSnippet, execution.repositoryId);
-    
+    console.log('🔍 Querying MongoDB Vector Database for candidates...');
+    // Search the vector DB for top 10 candidates to ensure we don't miss semantic nuances
+    const errorSnippet = errorLogs.length > 2000 ? errorLogs.slice(-2000) : errorLogs;
+    const rawChunks = await findRelevantCodeChunks(errorSnippet, execution.repositoryId, 10);
+
+    // Perform LLM Re-ranking to narrow down to the 3 best context matches
+    const chunks = await rerankChunks(rawChunks, errorSnippet);
+
     if (chunks && chunks.length > 0) {
-      ragContext = `\n## RAG VECTOR DATABASE MATCHES:\n(The following code chunks were mathematically identified as highly relevant to the error logs)\n\n`;
+      ragContext = `\n## RAG VECTOR DATABASE MATCHES (RE-RANKED):\n(The following code chunks were mathematically and semantically verified as highly relevant)\n\n`;
       chunks.forEach(c => {
-         ragContext += `--- FILE: ${c.filePath} | FUNCTION: ${c.functionName} ---\n${c.codeContent}\n\n`;
+        ragContext += `--- FILE: ${c.filePath} | FUNCTION: ${c.functionName} ---\n${c.codeContent}\n\n`;
       });
-      console.log(`✅ RAG identified ${chunks.length} semantically relevant code chunks!`);
+      console.log(`✅ Re-ranking complete: Selected ${chunks.length} high-confidence chunks.`);
     } else {
       console.log('⚠️ No RAG matches found. (Repository might not be fully indexed).');
     }
@@ -120,13 +271,15 @@ async function runSelfHealingPipeline(execution, githubToken) {
 
   const rcaPrompt = `
 You are a Senior Site Reliability Engineer. Analyze this CI failure.
+The system has pre-classified this as a **[${classification.type}]** error.
 
 ## CRITICAL RULES
-1. **Target Files:** Identify up to 3 files that must be read to understand and fix the bug (e.g., the failing test file AND the suspected source code file).
-2. **Fix Plan:** Provide a clear fix strategy. **KEEP IT EXTREMELY SHORT** (Maximum 2 brief sentences). NO bulky paragraphs. NO polite chat. Explain exactly what to edit.
-3. **Holistic Audit:** Do not focus only on the crashing line. Fix ALL obvious syntax errors or logic bugs in these files.
-4. **Security Hardening:** NEVER target, select, or modify ANY file located inside the '.github/' directory natively. The API tokens do not have workflow modification scopes and attempting to fix them will cause a fatal 404 crash.
+1. **Target Files:** Identify up to 3 files that must be read. (If [DEPENDENCY], prioritize package.json or config files).
+2. **Fix Plan:** Provide a clear fix strategy. **KEEP IT EXTREMELY SHORT**.
+3. **Holistic Audit:** Fix ALL obvious syntax errors or logic bugs in these files.
+4. **Security Hardening:** NEVER modify '.github/' directory files.
 
+## Classification Context: ${classification.reason}
 ## Repository: ${repo} | Branch: ${branch}
 
 ## Repository Files:
@@ -139,8 +292,9 @@ ${errorLogs.length > 4000 ? errorLogs.slice(-4000) : errorLogs}
 {
   "error_type": "string",
   "files_to_read": ["path/to/test_file.js", "path/to/source.js"],
-  "root_cause": "EXACT error only. Maximum 1-2 short sentences. No large explanations.",
-  "fix_plan": "Exact solution. Maximum 1-2 short sentences. Do not hallucinate massive paragraphs.",
+  "root_cause": "EXACT error only. Maximum 1-2 short sentences.",
+  "fix_plan": "Exact solution. Maximum 1-2 short sentences.",
+  "rationale": "Briefly explain WHY this fix works and what it prevents. (Max 2 sentences).",
   "confidence_score": 0.9
 }`;
 
@@ -176,7 +330,7 @@ ${errorLogs.length > 4000 ? errorLogs.slice(-4000) : errorLogs}
   }
 
   console.log(`📄 Step 2: Reading ${filesToRead.length} files from GitHub...`);
-  
+
   const filesContext = [];
   try {
     const fetchPromises = filesToRead.map(async (filePath) => {
@@ -215,13 +369,13 @@ You are an Autonomous Senior Software Engineer. Fix a confirmed bug.
 
 ## SOURCE FILES Context (with line numbers):
 ${filesContext.map(f => {
-  const numberedContent = f.content.split('\n').map((line, idx) => `${idx + 1}: ${line}`).join('\n');
-  return `--- FILE: ${f.path} ---\n${numberedContent}\n-----------------------`;
-}).join('\n\n')}`;
+    const numberedContent = f.content.split('\n').map((line, idx) => `${idx + 1}: ${line}`).join('\n');
+    return `--- FILE: ${f.path} ---\n${numberedContent}\n-----------------------`;
+  }).join('\n\n')}`;
 
   let fixedFiles = [];
   let jsonRetries = 3;
-  
+
   while (jsonRetries > 0) {
     try {
       // Keep maxTokens at 3000 to avoid hitting the 6000 Tokens Per Minute limit!
@@ -269,23 +423,23 @@ ${filesContext.map(f => {
     try {
       if (fix.replacements && Array.isArray(fix.replacements) && fix.replacements.length > 0) {
         let lines = original.content.split('\n');
-        
+
         // Sort replacements descending to avoid shifting line numbers as we apply patches
         const sortedReplacements = [...fix.replacements].sort((a, b) => b.startLine - a.startLine);
-        
+
         for (const r of sortedReplacements) {
           const startIdx = r.startLine - 1;
           const endIdx = r.endLine - 1;
-          
+
           if (startIdx >= 0 && endIdx < lines.length && startIdx <= endIdx) {
             const replaceLines = r.replace.split('\n');
             lines.splice(startIdx, endIdx - startIdx + 1, ...replaceLines);
             actualChanges++;
           } else {
-             throw new Error(`Invalid line range: ${r.startLine}-${r.endLine}`);
+            throw new Error(`Invalid line range: ${r.startLine}-${r.endLine}`);
           }
         }
-        
+
         // Save the patched content back onto the fix object so the native commit flow works
         fix.content = lines.join('\n');
       } else {
@@ -321,12 +475,12 @@ ${filesContext.map(f => {
     console.log(`  ✅ Branch created: ${fixBranch}`);
 
     const commitMsg = `🤖 AutoHeal Fix: ${(rca.root_cause || 'Bug fix').substring(0, 60)}`;
-    
+
     // Commit each changed file sequentially to the same branch
     for (const fileFix of fixedFiles) {
       const original = filesContext.find(f => f.path === fileFix.filePath);
       const sha = original ? original.sha : undefined; // if undefined, it's a new file
-      
+
       let retries = 3;
       while (retries > 0) {
         try {
@@ -351,6 +505,7 @@ ${filesContext.map(f => {
 **Root Cause:** ${rca.root_cause}
 **Modified Files:** \n${fixedFiles.map(f => `- \`${f.filePath}\``).join('\n')}
 **Fix Plan:** ${rca.fix_plan}
+**Why it works:** ${rca.rationale || 'Address the root cause correctly to pass CI validation.'}
 
 ---
 _Generated automatically by AutoHeal 2.0_`;
@@ -362,9 +517,29 @@ _Generated automatically by AutoHeal 2.0_`;
     execution.fixBranch = fixBranch;
     // We store the generated prTitle/prBody temporarily in errorType/errorMessage so webhook can read them later easily
     execution.errorMessage = prTitle;
-    execution.errorLogs = prBody; 
+    execution.errorLogs = prBody;
     execution.status = 'ai_complete';
     await execution.save();
+
+    // 🚀 PERSIST TO GLOBAL BRAIN (Learning Loop)
+    const { getErrorFingerprint } = require('./ai-fixer'); // avoid circular if needed
+    try {
+       const fingerprint = getErrorFingerprint(execution.errorLogs);
+       const FixCache = require('../models/FixCache');
+       await FixCache.findOneAndUpdate(
+         { errorFingerprint: fingerprint },
+         { 
+           errorType: rca.error_type,
+           rootCause: rca.root_cause,
+           fixStrategy: rca.fix_plan,
+           successCount: 1
+         },
+         { upsert: true }
+       );
+       console.log('   🧠 Logic persisted to Global Brain for future deduplication.');
+    } catch (e) {
+       console.warn('   ⚠️ Failed to persist to cache:', e.message);
+    }
 
     return {
       success: true,

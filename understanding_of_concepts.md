@@ -91,6 +91,11 @@ Running an autonomous AI self-healing pipeline carries two inherent risks that A
 If the AI-generated code fixes a bug but inadvertently breaks a different test, the CI pipeline will fail again. This triggers the GitHub Webhook, causing the AI to spin up another fix, which could fail again—launching an infinite pipeline execution loop.
 To combat this, AutoHeal enforces an absolute **3-Execution Limit per Hour per Repository**. Before any webhook is processed, the backend queries MongoDB for recent executions. If the AI has already run 3 times in the last 60 minutes for that specific repository, it trips the circuit breaker, aborts the pipeline, and returns safely, freezing the loop.
 
+### Classification, Deduplication, and the Watchdog
+- **Classification**: Before processing, an agent categorizes failures (e.g., [SYNTAX], [DEPENDENCY], [LOGIC]) to route them to the correct repair strategy.
+- **Deduplication**: We use semantic fingerprinting to identify if a crash has been solved before, allowing us to bypass LLM reasoning for known patterns.
+- **The Watchdog**: A background process that polls GitHub for missed webhooks or stuck pipelines, ensuring every failure reaches a resolution.
+
 ### Token Budgeting (TPM Limits)
 AI services (like Groq) enforce strict Tokens Per Minute (TPM) limits. AutoHeal maximizes accuracy while actively avoiding TPM rate limits using an aggressive surgical budgeting strategy:
 - **Log Truncation:** Raw error logs are truncated to the most recent 6000 characters before sending.

@@ -241,5 +241,18 @@ module.exports = {
   fetchWorkflowLogs,
   mergePR,
   closePR,
-  getPRDiff
+  getPRDiff,
+  checkWorkflowStatus: async (token, repoFullName, branch) => {
+    const { data } = await axios.get(
+      `${GITHUB_API}/repos/${repoFullName}/actions/runs`,
+      {
+        headers: {
+          Authorization: `token ${token}`,
+          Accept: 'application/vnd.github.v3+json'
+        },
+        params: { branch, per_page: 1 }
+      }
+    );
+    return data.workflow_runs?.[0] || null;
+  }
 };
