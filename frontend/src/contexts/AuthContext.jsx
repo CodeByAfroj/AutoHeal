@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useEffect } from 'react';
 
 const AuthContext = createContext(null);
 
-const API_URL = 'http://localhost:8000';
+const API_URL = 'https://autoheal-hwhw.onrender.com';
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
