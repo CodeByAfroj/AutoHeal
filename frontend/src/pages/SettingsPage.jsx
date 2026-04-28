@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
 import { Settings, User, Shield, Webhook, ExternalLink, Copy, Check, Activity, AlertCircle } from 'lucide-react';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
 
 export default function SettingsPage() {
   const { user, apiFetch } = useAuth();
@@ -24,7 +26,7 @@ export default function SettingsPage() {
   }, []);
 
   const copyWebhookUrl = () => {
-    const url = 'http://localhost:8000/webhook/github';
+    const url = `${API_URL}/webhook/github`;
     navigator.clipboard.writeText(url);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);

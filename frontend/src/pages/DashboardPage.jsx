@@ -13,23 +13,25 @@ import {
   ArrowRight
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
 
 export default function DashboardPage() {
   const { user, token } = useAuth();
   const navigate = useNavigate();
 
   // 🚀 Persistent Caching for Dashboard Stats
-  const { 
-    data: stats, 
-    loading: statsLoading, 
-    refetch: refetchStats 
+  const {
+    data: stats,
+    loading: statsLoading,
+    refetch: refetchStats
   } = useAutoQuery('dashboard_stats', '/api/executions/stats');
 
   // 🚀 Persistent Caching for Recent Pipelines
-  const { 
-    data: execData, 
-    loading: execLoading, 
-    refetch: refetchExecs 
+  const {
+    data: execData,
+    loading: execLoading,
+    refetch: refetchExecs
   } = useAutoQuery('recent_pipelines', '/api/executions?limit=5');
 
   const executions = execData?.executions || [];
@@ -39,7 +41,7 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!token) return;
 
-    const sse = new EventSource(`http://localhost:8000/api/executions/stream?token=${token}`);
+    const sse = new EventSource(`${API_URL}/api/executions/stream?token=${token}`);
 
     sse.onmessage = (event) => {
       try {

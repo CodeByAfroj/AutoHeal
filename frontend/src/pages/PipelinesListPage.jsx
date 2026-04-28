@@ -4,6 +4,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { useAutoQuery } from '../hooks/useAutoQuery';
 import ExecutionCard from '../components/ExecutionCard';
 import { Activity, Filter, RefreshCw } from 'lucide-react';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
 
 export default function PipelinesListPage() {
   const { token } = useAuth();
@@ -27,7 +29,7 @@ export default function PipelinesListPage() {
   useEffect(() => {
     if (!token) return;
 
-    const sse = new EventSource(`http://localhost:8000/api/executions/stream?token=${token}`);
+    const sse = new EventSource(`${API_URL}/api/executions/stream?token=${token}`);
 
     sse.onmessage = (event) => {
       try {

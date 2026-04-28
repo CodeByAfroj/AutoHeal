@@ -2,7 +2,7 @@ import { motion } from 'framer-motion';
 import { Zap, Shield, Bot, GitPullRequest, ArrowRight } from 'lucide-react';
 import GitHubIcon from '../components/GitHubIcon';
 
-const API_URL = 'http://localhost:8000';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 export default function LoginPage() {
   const handleLogin = () => {

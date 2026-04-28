@@ -7,6 +7,8 @@ import DiffViewer from '../components/DiffViewer';
 import ApprovalModal from '../components/ApprovalModal';
 import StatusBadge from '../components/StatusBadge';
 import { ArrowLeft, ExternalLink, GitCommit, Clock, Bot, CheckCircle2, XCircle } from 'lucide-react';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
 
 export default function PipelinePage() {
   const { id } = useParams();
@@ -53,7 +55,7 @@ export default function PipelinePage() {
   useEffect(() => {
     if (!token) return;
 
-    const sse = new EventSource(`http://localhost:8000/api/executions/stream?token=${token}`);
+    const sse = new EventSource(`${API_URL}/api/executions/stream?token=${token}`);
 
     sse.onmessage = (event) => {
       try {
