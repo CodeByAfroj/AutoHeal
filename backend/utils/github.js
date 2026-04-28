@@ -82,41 +82,49 @@ async function deleteWebhook(token, repoFullName, webhookId) {
 function extractErrorLogs(fullLogs) {
   if (typeof fullLogs !== 'string') return '';
   const lines = fullLogs.split('\n');
-  const errorKeywords = ['error', 'fail', 'exception', 'traceback', 'reject', 'fatal', 'err'];
-
-  let interestingIndices = new Set();
-  const contextSize = 5; // lines before and after an error line
-
+  let resultLines = [];
+  
+  // 1. Find the primary failure blocks (FAIL)
+  let inFailBlock = false;
+  let failBlockLines = [];
+  
   for (let i = 0; i < lines.length; i++) {
-    const lowerLine = lines[i].toLowerCase();
-    // Typical log format checking
-    if (errorKeywords.some(kw => lowerLine.includes(kw))) {
-      for (let j = Math.max(0, i - contextSize); j <= Math.min(lines.length - 1, i + contextSize); j++) {
-        interestingIndices.add(j);
+    const line = lines[i];
+    
+    // Start of a Jest failure block
+    if (line.includes('FAIL ')) {
+      inFailBlock = true;
+      failBlockLines.push(`\n--- PRIMARY FAILURE DETECTED ---\n${line}`);
+      continue;
+    }
+    
+    if (inFailBlock) {
+      failBlockLines.push(line);
+      // End of block is usually a summary or the start of another job
+      if (line.includes('Test Suites:') || line.includes('Done in ') || line.includes('--- PRIMARY FAILURE')) {
+        inFailBlock = false;
+      }
+    }
+    
+    // Also capture lines with explicit Reference/Syntax errors
+    if (line.includes('ReferenceError') || line.includes('SyntaxError') || line.includes('TypeError')) {
+      // Capture context around these errors
+      for (let j = Math.max(0, i - 5); j <= Math.min(lines.length - 1, i + 15); j++) {
+        resultLines.push(lines[j]);
       }
     }
   }
 
-  // If no clear errors found, fallback to last 100 lines
-  if (interestingIndices.size === 0) {
-    return lines.slice(-100).join('\n');
+  const finalLogs = [...failBlockLines, ...resultLines].join('\n');
+  
+  // If nothing specific found, fallback to the last 150 lines
+  if (finalLogs.trim().length < 50) {
+    return lines.slice(-150).join('\n');
   }
 
-  // Sort and reconstruct logs with context blocks
-  const sortedIndices = Array.from(interestingIndices).sort((a, b) => a - b);
-  const result = [];
-
-  let lastIdx = -2;
-  for (const idx of sortedIndices) {
-    if (lastIdx !== -2 && idx > lastIdx + 1) {
-      result.push('... [Logs Skipped] ...');
-    }
-    result.push(lines[idx]);
-    lastIdx = idx;
-  }
-
-  return result.join('\n');
+  return finalLogs.substring(0, 15000); // Plenty of room for context
 }
+
 
 /**
  * Fetch workflow run logs as text

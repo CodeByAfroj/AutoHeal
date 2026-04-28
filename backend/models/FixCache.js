@@ -1,24 +1,24 @@
 const mongoose = require('mongoose');
 
-const fixCacheSchema = new mongoose.Schema({
-  // A hash of the normalized error message to detect identical crashes instantly
-  errorFingerprint: {
-    type: String,
-    required: true,
-    unique: true,
-    index: true
+const FixCacheSchema = new mongoose.Schema({
+  repositoryId: { type: mongoose.Schema.Types.ObjectId, ref: 'Repository', required: true },
+  logFingerprint: { type: String, required: true },
+  errorFingerprint: { type: String }, // Legacy support for ghost indexes
+  successfulFix: {
+    files: [{
+      filePath: String,
+      replacements: [{
+        startLine: Number,
+        endLine: Number,
+        replace: String
+      }]
+    }]
   },
-  errorType: String,
-  rootCause: String,
-  fixStrategy: String,
-  // We store the 'solution pattern' so we can apply it to other files with similar issues
-  fixPattern: mongoose.Schema.Types.Mixed,
-  successCount: {
-    type: Number,
-    default: 1
-  }
-}, {
-  timestamps: true
+  resolvedAt: { type: Date, default: Date.now },
+  originalError: String
 });
 
-module.exports = mongoose.model('FixCache', fixCacheSchema);
+// Compound unique index to prevent duplication while allowing legacy nulls
+FixCacheSchema.index({ repositoryId: 1, logFingerprint: 1 }, { unique: true });
+
+module.exports = mongoose.model('FixCache', FixCacheSchema);

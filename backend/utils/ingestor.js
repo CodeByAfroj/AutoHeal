@@ -45,7 +45,7 @@ async function ingestRepository(repositoryId, fullName, token, branch) {
     // Filter out purely documentation or config files. Target only logic.
     const sourceFiles = allFiles.filter(file => {
       const ext = path.extname(file);
-      return ['.js', '.jsx', '.ts', '.tsx', '.py', '.java', '.go'].includes(ext);
+      return ['.js', '.jsx', '.ts', '.tsx', '.py', '.java', '.go', '.sh', '.yml', '.yaml', '.json'].includes(ext);
     });
 
     console.log(`   [Ingestor] Scanned ${sourceFiles.length} raw source files.`);

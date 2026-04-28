@@ -16,30 +16,19 @@ const approvalRoutes = require('./routes/approval');
 const { runWatchdog } = require('./utils/watchdog');
 
 const app = express();
+console.log(process.env.GEMINI_API_KEY ? '✅ Gemini API Key detected.' : '❌ Gemini API Key NOT detected in process.env');
+console.log(process.env.GROQ_API_KEY ? '✅ Groq API Key detected.' : '❌ Groq API Key NOT detected in process.env');
 const PORT = process.env.PORT || 8000;
 
 const Execution = require('./models/Execution');
 
 // ============================================
-// Database Connection & Boot Sweep
+// Database Connection
 // ============================================
 connectDB().then(async () => {
-  try {
-    // 🧹 Sweep up any 'Ghost Pipelines' that got stuck when Node restarted mid-execution
-    const orphans = await Execution.updateMany(
-      { status: { $in: ['ci_failed', 'logs_processed', 'ai_running', 'validating_shadow'] } },
-      { $set: { status: 'error', errorMessage: 'Pipeline forcefully terminated (Backend Restarted).' } }
-    );
-    if (orphans.modifiedCount > 0) {
-      console.log(`  🧹 Swept ${orphans.modifiedCount} stuck/orphaned pipelines from the previous session.`);
-    }
-  } catch (err) {
-    console.warn('Failed to run orphan sweep:', err.message);
-  }
-
-  // 🐕 Launch the Periodic Watchdog (Every 5 minutes)
-  runWatchdog(); // Run once on boot
-  setInterval(runWatchdog, 1000 * 60 * 5); 
+  console.log('✅ MongoDB connected and ready.');
+  // Watchdog disabled on boot to prevent dev-loops. 
+  // Triggered only by webhook context.
 });
 
 // ============================================
@@ -128,7 +117,7 @@ app.listen(PORT, () => {
   console.log(`
   ╔══════════════════════════════════════════╗
   ║   🩹 AutoHeal 2.0 Backend               ║
-  ║   Running on http://localhost:${PORT}       ║
+  ║   Running on http://localhost:${PORT}     ║
   ║                                          ║
   ║   Health:  http://localhost:${PORT}/health   ║
   ║   Auth:    http://localhost:${PORT}/auth     ║

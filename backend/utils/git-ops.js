@@ -29,8 +29,10 @@ async function createBranch(token, repo, branchName, baseSha) {
  * Get a file's content from a repo
  */
 async function getFileContent(token, repo, filePath, branch) {
+  const url = `${GITHUB_API}/repos/${repo}/contents/${filePath}`;
+  console.log(`   [GitOps] GET Content: ${url}?ref=${branch}`);
   const { data } = await axios.get(
-    `${GITHUB_API}/repos/${repo}/contents/${filePath}`,
+    url,
     {
       params: { ref: branch },
       headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' }
@@ -79,7 +81,7 @@ async function getRepoTree(token, repo, branch) {
     `${GITHUB_API}/repos/${repo}/git/trees/${branch}?recursive=1`,
     { headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' } }
   );
-  return data.tree.filter(t => t.type === 'blob').map(t => t.path);
+  return data;
 }
 
 /**

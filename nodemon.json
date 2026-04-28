@@ -1,0 +1,13 @@
+{
+  "ignore": [
+    ".git",
+    "node_modules/**/node_modules",
+    "backend/logs/*",
+    "backend/models/*",
+    "backend/utils/rag/*",
+    "**/*.test.js",
+    "**/temp/*"
+  ],
+  "watch": ["backend"],
+  "ext": "js,json"
+}
