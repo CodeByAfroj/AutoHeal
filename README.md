@@ -125,7 +125,7 @@ If an AI-generated fix fails validation on the Shadow Branch, the system doesn't
 - MongoDB Atlas account (with a Vector Search Index named `vector_index`)
 - GitHub OAuth App
 - Groq API key & Gemini API key
-- ngrok (for local webhook delivery)
+- Publicly accessible Backend URL (like Render, or ngrok for local dev)
 
 ### 1. Installation
 

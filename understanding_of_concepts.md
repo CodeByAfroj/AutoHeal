@@ -4,25 +4,25 @@ This document summarizes some of the core external integrations and networking a
 
 ---
 
-## 1. OAuth vs. Webhooks (Why we use Localhost vs Ngrok)
+## 1. OAuth vs. Webhooks (Why we use Localhost vs Production Backend)
 
-A common point of confusion is why the GitHub OAuth App configuration uses `http://localhost:8000`, while the webhooks strictly require a public `ngrok` URL. The distinction comes down to **who** is talking to the server.
+A common point of confusion is why the GitHub OAuth App configuration uses `http://localhost:8000`, while the webhooks strictly require a public production URL. The distinction comes down to **who** is talking to the server.
 
 ### Localhost for OAuth (Browser-to-Server)
 When a user clicks "Login with GitHub", the authentication flow happens entirely inside **the user's web browser**. 
 1. The browser navigates to GitHub's authorization page.
 2. The user approves access.
-3. GitHub instructs the user's browser to redirect to: `http://localhost:8000/auth/github/callback`.
-4. Because the browser is running on the local machine alongside the development Node.js server, it resolves `localhost:8000` perfectly and returns the authorization code to the backend.
+3. GitHub instructs the user's browser to redirect to: `https://autoheal-hwhw.onrender.com/auth/github/callback`.
+4. Because the browser is running on the local machine alongside the development Node.js server, it resolves the production URL perfectly and returns the authorization code to the backend.
 
-### Ngrok for Webhooks (Server-to-Server)
+### Production Backend for Webhooks (Server-to-Server)
 When a CI pipeline crashes on GitHub, the user's web browser is completely out of the picture.
 1. An isolated server deep inside GitHub's data center detects the pipeline failure.
 2. It attempts to send a `POST` payload containing the error details to the registered webhook URL.
 3. If the URL is `http://localhost:8000`, the GitHub server will search its *own internal localhost loopback* and fail. 
-4. Webhooks require `ngrok` to provide a secure, public-facing tunnel to expose the local development server to the internet. 
+4. Webhooks require a secure, public-facing URL (like Render) to expose the server to the internet. 
 
-Without `ngrok`, GitHub cannot deliver pipeline failure alerts, leaving the AI completely blind to any bugs.
+Without a public URL, GitHub cannot deliver pipeline failure alerts, leaving the AI completely blind to any bugs.
 
 ---
 
@@ -35,7 +35,7 @@ Here is the exact step-by-step flow:
 1. **User Action:** The user clicks "Enable" on a repository in the AutoHeal frontend dashboard.
 2. **Hit the API:** The frontend fires a POST request to `/api/repos/:repoId/enable` on the backend.
 3. **Decrypt Token:** The backend fetches the user's encrypted GitHub Access Token (originally granted during the OAuth login) from MongoDB and decrypts it.
-4. **Determine the Public URL:** The backend looks at the `.env` file for the `NGROK_URL` (e.g., `https://xyz.ngrok-free.app`) and dynamically generates the webhook endpoint: `https://xyz.ngrok-free.app/webhook/github`.
+4. **Determine the Public URL:** The backend looks at the `.env` file for the `BACKEND_URL` (e.g., `https://autoheal-hwhw.onrender.com`) and dynamically generates the webhook endpoint: `https://autoheal-hwhw.onrender.com/webhook/github`.
 5. **Call GitHub API:** The backend uses the `createWebhook()` function to send a REST API request directly to GitHub (`POST https://api.github.com/repos/{owner}/{repo}/hooks`). 
    - It specifically tells GitHub: *"Only alert me on the `workflow_run` event."*
    - It securely attaches a cryptographic secret (`WEBHOOK_SECRET`) so that when payloads arrive later, the backend can mathematically verify they genuinely came from GitHub and not a malicious actor.

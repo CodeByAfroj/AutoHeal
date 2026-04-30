@@ -76,7 +76,7 @@ router.post('/:repoId/enable', authMiddleware, async (req, res) => {
     const token = decrypt(user.accessToken);
 
     // Build webhook URL
-    const baseUrl = process.env.NGROK_URL || `http://localhost:${process.env.PORT || 8000}`;
+    const baseUrl = process.env.BACKEND_URL || process.env.NGROK_URL || `http://localhost:${process.env.PORT || 8000}`;
     const webhookUrl = `${baseUrl}/webhook/github`;
     const webhookSecret = process.env.WEBHOOK_SECRET;
 
