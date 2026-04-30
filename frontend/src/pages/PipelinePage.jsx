@@ -155,19 +155,20 @@ export default function PipelinePage() {
           <motion.h1
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="text-2xl font-extrabold text-white flex items-center gap-3"
+            className="text-xl md:text-2xl font-extrabold text-white flex flex-wrap items-center gap-3"
           >
-            {execution.repoFullName}
+            <span className="truncate max-w-[200px] sm:max-w-none">{execution.repoFullName}</span>
             <StatusBadge status={execution.status} size="lg" />
           </motion.h1>
-          <div className="flex items-center gap-4 mt-1 text-sm text-gray-400">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1 text-xs md:text-sm text-gray-400">
             <span className="flex items-center gap-1.5">
               <GitCommit className="w-3.5 h-3.5" />
               <span className="font-mono">{execution.commitSha?.substring(0, 7)}</span>
             </span>
             <span className="flex items-center gap-1.5">
               <Clock className="w-3.5 h-3.5" />
-              {formatDate(execution.createdAt)}
+              <span className="hidden sm:inline">{formatDate(execution.createdAt)}</span>
+              <span className="sm:hidden">{new Date(execution.createdAt).toLocaleDateString()}</span>
             </span>
           </div>
         </div>
@@ -196,25 +197,25 @@ export default function PipelinePage() {
               >
                 <button
                   onClick={() => setShowApproval(true)}
-                  className="btn-primary flex items-center gap-2"
+                  className="btn-primary flex items-center justify-center gap-2 flex-1 sm:flex-none"
                 >
                   <CheckCircle2 className="w-4 h-4" />
-                  Review & Approve
+                  <span className="whitespace-nowrap">Review & Approve</span>
                 </button>
                 <button
                   onClick={handleReject}
                   disabled={actionLoading}
-                  className="btn-danger flex items-center gap-2"
+                  className="btn-danger flex items-center justify-center gap-2 flex-1 sm:flex-none"
                 >
                   <XCircle className="w-4 h-4" />
-                  Reject Fix
+                  <span className="whitespace-nowrap">Reject Fix</span>
                 </button>
                 {execution.prUrl && (
                   <a
                     href={execution.prUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="btn-secondary flex items-center gap-2"
+                    className="btn-secondary hidden sm:flex items-center justify-center gap-2"
                   >
                     <ExternalLink className="w-4 h-4" />
                     View on GitHub

@@ -97,15 +97,15 @@ export default function DashboardPage() {
   return (
     <div>
       {/* Header */}
-      <div className="mb-8">
+      <div className="mb-6 md:mb-8">
         <motion.h1
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="text-3xl font-extrabold text-white mb-2"
+          className="text-2xl md:text-3xl font-extrabold text-white mb-2"
         >
           Welcome back, <span className="gradient-text">{user?.displayName || user?.username}</span>
         </motion.h1>
-        <p className="text-gray-400">Here's what's happening with your pipelines today.</p>
+        <p className="text-sm text-gray-400">Here's what's happening with your pipelines today.</p>
       </div>
 
       {/* Stats Grid */}

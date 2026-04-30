@@ -112,29 +112,29 @@ export default function ExecutionCard({ execution, index = 0 }) {
         </p>
       )}
 
-      <div className="flex items-center justify-between pl-12">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-1.5 text-gray-500 font-mono text-[10px] uppercase tracking-wider">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between pl-0 sm:pl-12 gap-y-3">
+        <div className="flex flex-wrap items-center gap-3 sm:gap-4">
+          <div className="flex items-center gap-1.5 text-gray-500 font-mono text-[9px] sm:text-[10px] uppercase tracking-wider">
             <Clock className="w-3 h-3" />
             <LiveTimer startTime={execution.createdAt} status={execution.status} />
           </div>
 
           {/* New Architecture Badges */}
           {execution.rcaResult?.errorType && (
-            <div className="px-2 py-0.5 rounded-full bg-navy-700 text-[9px] font-bold text-gray-400 border border-white/5 uppercase">
+            <div className="px-2 py-0.5 rounded-full bg-navy-700 text-[8px] sm:text-[9px] font-bold text-gray-400 border border-white/5 uppercase">
               {execution.rcaResult.errorType}
             </div>
           )}
 
           {execution.rcaResult?.confidenceScore > 0 && (
             <div className="flex items-center gap-1">
-              <div className="w-8 h-1 bg-navy-700 rounded-full overflow-hidden">
+              <div className="w-6 sm:w-8 h-1 bg-navy-700 rounded-full overflow-hidden">
                 <div 
                   className="h-full bg-heal-cyan shadow-[0_0_5px_rgba(0,243,255,0.5)]" 
                   style={{ width: `${execution.rcaResult.confidenceScore * 100}%` }}
                 />
               </div>
-              <span className="text-[9px] font-bold text-gray-500">
+              <span className="text-[8px] sm:text-[9px] font-bold text-gray-500">
                 {Math.round(execution.rcaResult.confidenceScore * 100)}%
               </span>
             </div>

@@ -180,12 +180,12 @@ export default function HomePage() {
                     </motion.div>
 
 
-                    <h1 className="text-6xl md:text-8xl font-extrabold text-white mb-8 tracking-tighter leading-tight">
-                        Self-Healing <br />
+                    <h1 className="text-4xl sm:text-6xl md:text-8xl font-extrabold text-white mb-6 md:mb-8 tracking-tighter leading-[1.1] md:leading-tight px-4">
+                        Self-Healing <br className="hidden sm:block" />
                         <span className="gradient-text">Software Pipelines</span>
                     </h1>
 
-                    <p className="text-xl text-gray-400 max-w-2xl mx-auto mb-12 leading-relaxed">
+                    <p className="text-base sm:text-lg md:text-xl text-gray-400 max-w-2xl mx-auto mb-10 md:mb-12 leading-relaxed px-4">
                         Autonomous AI agent that detects, diagnoses, and repairs pipeline failures in real-time.
                         Zero manual intervention, maximum developer productivity.
                     </p>
@@ -230,9 +230,9 @@ export default function HomePage() {
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-12 min-h-[500px]">
-                                {/* Sidebar */}
-                                <div className="col-span-3 border-r border-white/5 bg-navy-900/30 p-4 space-y-6 text-left">
+                            <div className="flex flex-col lg:grid lg:grid-cols-12 min-h-[500px]">
+                                {/* Sidebar - Hidden on mobile in mockup for clarity */}
+                                <div className="hidden lg:block lg:col-span-3 border-r border-white/5 bg-navy-900/30 p-4 space-y-6 text-left">
                                     <div className="space-y-4">
                                         <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest px-2">Pinned Repos</p>
                                         {[
@@ -250,7 +250,7 @@ export default function HomePage() {
                                 </div>
 
                                 {/* Main Content Area (Scrollable) */}
-                                <div className="col-span-9 flex flex-col h-[600px] overflow-hidden">
+                                <div className="col-span-12 lg:col-span-9 flex flex-col h-[500px] md:h-[600px] overflow-hidden">
                                     <div className="flex-1 overflow-y-auto p-6 space-y-6">
 
                                         {/* Status Banner */}
@@ -426,18 +426,18 @@ export default function HomePage() {
                                         </div>
 
                                         {/* Stats Grid */}
-                                        <div className="grid grid-cols-4 gap-4 mt-6">
+                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mt-6">
                                             {[
                                                 { label: 'MTTR', val: '2.4 min', change: '-88%' },
                                                 { label: 'Success', val: '99.2%', change: '+12%' },
                                                 { label: 'Healed', val: '1,429', change: '+42' },
                                                 { label: 'Saved', val: '240h', change: 'This wk' }
                                             ].map(stat => (
-                                                <div key={stat.label} className="p-3 bg-white/5 rounded-2xl border border-white/5">
-                                                    <p className="text-[9px] font-bold text-gray-500 uppercase tracking-widest">{stat.label}</p>
-                                                    <div className="flex items-end justify-between mt-1">
-                                                        <span className="text-lg font-bold text-white tracking-tight">{stat.val}</span>
-                                                        <span className={`text-[8px] font-bold ${stat.change.startsWith('+') ? 'text-heal-green' : 'text-heal-cyan'}`}>{stat.change}</span>
+                                                <div key={stat.label} className="p-2 md:p-3 bg-white/5 rounded-2xl border border-white/5">
+                                                    <p className="text-[8px] md:text-[9px] font-bold text-gray-500 uppercase tracking-widest">{stat.label}</p>
+                                                    <div className="flex items-end justify-between mt-0.5 md:mt-1">
+                                                        <span className="text-sm md:text-lg font-bold text-white tracking-tight">{stat.val}</span>
+                                                        <span className={`text-[7px] md:text-[8px] font-bold ${stat.change.startsWith('+') ? 'text-heal-green' : 'text-heal-cyan'}`}>{stat.change}</span>
                                                     </div>
                                                 </div>
                                             ))}
