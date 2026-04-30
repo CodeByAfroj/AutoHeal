@@ -3,7 +3,7 @@ const authMiddleware = require('../middleware/auth');
 const User = require('../models/User');
 const Repository = require('../models/Repository');
 const { decrypt } = require('../utils/crypto');
-const { fetchUserRepos, createWebhook, deleteWebhook } = require('../utils/github');
+const { fetchUserRepos, createWebhook, updateWebhook, deleteWebhook } = require('../utils/github');
 const { ingestRepository } = require('../utils/ingestor');
 const router = express.Router();
 
@@ -99,7 +99,12 @@ router.post('/:repoId/enable', authMiddleware, async (req, res) => {
           const existing = listRes.data.find(h => h.config?.url?.includes('/webhook/github'));
           if (existing) {
             webhookId = existing.id;
-            console.log(`✅ Found existing webhook: ${webhookId}`);
+            // Check if we need to update the URL (e.g. switched from ngrok to Render)
+            if (existing.config.url !== webhookUrl) {
+              console.log(`🔄 Updating existing webhook URL from ${existing.config.url} to ${webhookUrl}`);
+              await updateWebhook(token, fullName, webhookId, webhookUrl, webhookSecret);
+            }
+            console.log(`✅ Found and verified existing webhook: ${webhookId}`);
           }
         } catch (listErr) {
           console.warn('Could not list webhooks:', listErr.message);

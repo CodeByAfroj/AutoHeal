@@ -62,6 +62,31 @@ async function createWebhook(token, repoFullName, webhookUrl, secret) {
 }
 
 /**
+ * Update an existing webhook
+ */
+async function updateWebhook(token, repoFullName, webhookId, webhookUrl, secret) {
+  const { data } = await axios.patch(
+    `${GITHUB_API}/repos/${repoFullName}/hooks/${webhookId}`,
+    {
+      config: {
+        url: webhookUrl,
+        content_type: 'json',
+        secret: secret,
+        insecure_ssl: '0'
+      }
+    },
+    {
+      headers: {
+        Authorization: `token ${token}`,
+        Accept: 'application/vnd.github.v3+json'
+      }
+    }
+  );
+
+  return data;
+}
+
+/**
  * Delete a webhook from a repository
  */
 async function deleteWebhook(token, repoFullName, webhookId) {
@@ -245,6 +270,7 @@ async function getPRDiff(token, repoFullName, prNumber) {
 module.exports = {
   fetchUserRepos,
   createWebhook,
+  updateWebhook,
   deleteWebhook,
   fetchWorkflowLogs,
   mergePR,
