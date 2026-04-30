@@ -10,7 +10,7 @@ const passport = require('./config/passport');
 // Route imports
 const authRoutes = require('./routes/auth');
 const repoRoutes = require('./routes/repos');
-const webhookRoutes = require('./routes/webhook').router; 
+const webhookRoutes = require('./routes/webhook').router;
 const executionRoutes = require('./routes/executions');
 const approvalRoutes = require('./routes/approval');
 const { runWatchdog } = require('./utils/watchdog');
@@ -115,15 +115,16 @@ app.use((err, req, res, next) => {
 // Start Server
 // ============================================
 app.listen(PORT, () => {
+  const displayUrl = process.env.BACKEND_URL || process.env.NGROK_URL || `http://localhost:${PORT}`;
   console.log(`
-  ╔══════════════════════════════════════════╗
-  ║   🩹 AutoHeal 2.0 Backend               ║
-  ║   Running on http://localhost:${PORT}     ║
-  ║                                          ║
-  ║   Health:  http://localhost:${PORT}/health   ║
-  ║   Auth:    http://localhost:${PORT}/auth     ║
-  ║   Webhook: http://localhost:${PORT}/webhook  ║
-  ╚══════════════════════════════════════════╝
+  ╔══════════════════════════════════════════════╗
+  ║   🩹 AutoHeal 2.0 Backend                    ║
+  ║   Active:  ${displayUrl}
+  ║                                              ║
+  ║   Health:  ${displayUrl}/health
+  ║   Auth:    ${displayUrl}/auth
+  ║   Webhook: ${displayUrl}/webhook/github
+  ╚══════════════════════════════════════════════╝
   `);
 });
 
