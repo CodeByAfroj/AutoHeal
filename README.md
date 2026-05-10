@@ -1,6 +1,6 @@
 # 🩹 AutoHeal 2.0 — AI-Powered Self-Healing CI/CD Platform
 
-AutoHeal 2.0 is a full-stack SaaS platform that **automatically detects CI/CD failures**, **diagnoses root causes using AI**, and **generates pull requests with fixes** — all without human intervention.
+AutoHeal is a full-stack SaaS platform that **automatically detects CI/CD failures**, **diagnoses root causes using AI**, and **generates pull requests with fixes** — all without human intervention.
 
 
 ## 🖼️ Product Showcase
