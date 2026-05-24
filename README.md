@@ -8,7 +8,7 @@ AutoHeal is a full-stack SaaS platform that **automatically detects CI/CD failur
 <p align="center">
   <img src="frontend/public/Landing.png" width="100%" alt="AutoHeal Landing">
   <br>
-  <b>The Command Center</b>: A high-fidelity, interactive hub for autonomous CI.
+  <b>The Command Center</b>: A high-fidelity, interactive hub for autonomous CI
 </p>
 
 <p align="center">
