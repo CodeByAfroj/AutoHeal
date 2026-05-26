@@ -22,18 +22,10 @@ const PORT = process.env.PORT || 8000;
 
 const Execution = require('./models/Execution');
 
-// ============================================
-// Database Connection
-// ============================================
 connectDB().then(async () => {
   console.log('✅ MongoDB connected and ready.');
-  // Watchdog disabled on boot to prevent dev-loops. 
-  // Triggered only by webhook context.
-});
 
-// ============================================
-// Middleware
-// ============================================
+});
 
 // CORS — allow frontend
 app.use(cors({
@@ -43,8 +35,6 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-// Body parsing — JSON for most routes
-// Note: webhook route uses raw body for signature verification
 app.use((req, res, next) => {
   if (req.path === '/webhook/github') {
     next();
@@ -55,7 +45,6 @@ app.use((req, res, next) => {
 
 app.use(express.urlencoded({ extended: true }));
 
-// Session (needed for Passport OAuth flow)
 app.use(session({
   secret: process.env.JWT_SECRET || 'fallback-secret',
   resave: false,
@@ -75,10 +64,6 @@ app.use(session({
 // Passport
 app.use(passport.initialize());
 app.use(passport.session());
-
-// ============================================
-// Routes
-// ============================================
 
 // Health check
 app.get('/health', (req, res) => {
@@ -100,9 +85,6 @@ app.use('/api/executions', approvalRoutes);
 // Webhook route (public — verified via signature)
 app.use('/webhook/github', webhookRoutes);
 
-// ============================================
-// Error Handler
-// ============================================
 app.use((err, req, res, next) => {
   console.error('🔥 Unhandled Error:', err);
   res.status(500).json({
@@ -111,9 +93,6 @@ app.use((err, req, res, next) => {
   });
 });
 
-// ============================================
-// Start Server
-// ============================================
 app.listen(PORT, () => {
   const displayUrl = process.env.BACKEND_URL || process.env.NGROK_URL || `http://localhost:${PORT}`;
   console.log(`
