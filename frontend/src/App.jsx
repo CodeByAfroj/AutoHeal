@@ -48,14 +48,12 @@ function AppRoutes() {
   
   return (
     <Routes>
-      {/* Public */}
       <Route path="/" element={<HomePage />} />
       <Route path="/login" element={
         <PublicRoute><LoginPage /></PublicRoute>
       } />
       <Route path="/auth/callback" element={<AuthCallback />} />
 
-      {/* Protected */}
       <Route path="/app" element={
         <ProtectedRoute><Layout /></ProtectedRoute>
       }>
