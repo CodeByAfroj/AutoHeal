@@ -7,7 +7,6 @@ const MongoStore = require('connect-mongo');
 const connectDB = require('./config/db');
 const passport = require('./config/passport');
 
-// Route imports
 const authRoutes = require('./routes/auth');
 const repoRoutes = require('./routes/repos');
 const webhookRoutes = require('./routes/webhook').router;
@@ -27,7 +26,6 @@ connectDB().then(async () => {
 
 });
 
-// CORS — allow frontend
 app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:5173',
   credentials: true,
