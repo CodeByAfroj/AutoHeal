@@ -6,10 +6,6 @@ const { decrypt } = require('../utils/crypto');
 const { mergePR, closePR } = require('../utils/github');
 const router = express.Router();
 
-/*
- * POST /api/executions/:id/approve
- * Approve AI-generated fix and merge PR
- */
 router.post('/:id/approve', authMiddleware, async (req, res) => {
   try {
     const execution = await Execution.findOne({
