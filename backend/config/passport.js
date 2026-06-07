@@ -26,8 +26,7 @@ passport.use(new GitHubStrategy({
     try {
       // Encrypt the access token before storage
       const encryptedToken = encrypt(accessToken);
-
-      // Upsert user
+      
       const user = await User.findOneAndUpdate(
         { githubId: profile.id },
         {
