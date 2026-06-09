@@ -53,10 +53,6 @@ router.post('/:id/approve', authMiddleware, async (req, res) => {
   }
 });
 
-/*
- * POST /api/executions/:id/reject
- * Reject AI-generated fix and close PR
- */
 router.post('/:id/reject', authMiddleware, async (req, res) => {
   try {
     const execution = await Execution.findOne({
